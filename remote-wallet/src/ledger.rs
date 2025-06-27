@@ -614,6 +614,7 @@ pub fn get_ledger_from_info(
         })
         .collect();
     if matches.is_empty() {
+        println!("No device found111");
         return Err(RemoteWalletError::NoDeviceFound);
     }
     matches.sort_by(|a, b| a.1.cmp(&b.1));

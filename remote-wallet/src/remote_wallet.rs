@@ -2,9 +2,12 @@
 use {crate::ledger::is_valid_ledger, parking_lot::Mutex, std::sync::Arc};
 use {
     crate::{
+        hardware_wallet::HardwareWallet,
+        keystone::{is_valid_keystone, KeystoneWallet},
         ledger::LedgerWallet,
         ledger_error::LedgerError,
         locator::{Locator, LocatorError, Manufacturer},
+        // trezor::{is_valid_trezor, TrezorWallet},
     },
     log::*,
     parking_lot::RwLock,
@@ -116,32 +119,76 @@ impl RemoteWalletManager {
 
         let mut detected_devices = vec![];
         let mut errors = vec![];
+
         for device_info in devices.filter(|&device_info| {
             is_valid_hid_device(device_info.usage_page(), device_info.interface_number())
-                && is_valid_ledger(device_info.vendor_id(), device_info.product_id())
         }) {
-            match usb.open_path(device_info.path()) {
-                Ok(device) => {
-                    let mut ledger = LedgerWallet::new(device);
-                    let result = ledger.read_device(device_info);
-                    match result {
-                        Ok(info) => {
-                            ledger.pretty_path = info.get_pretty_path();
-                            let path = device_info.path().to_str().unwrap().to_string();
-                            trace!("Found device: {:?}", info);
-                            detected_devices.push(Device {
-                                path,
-                                info,
-                                wallet_type: RemoteWalletType::Ledger(Rc::new(ledger)),
-                            })
-                        }
-                        Err(err) => {
-                            error!("Error connecting to ledger device to read info: {}", err);
-                            errors.push(err)
+            let vendor_id = device_info.vendor_id();
+            let product_id = device_info.product_id();
+
+            // Check for different hardware wallet types
+            if is_valid_ledger(vendor_id, product_id) {
+                match usb.open_path(device_info.path()) {
+                    Ok(device) => {
+                        let mut ledger = LedgerWallet::new(device);
+                        let result = ledger.read_device(device_info);
+                        match result {
+                            Ok(info) => {
+                                ledger.pretty_path = info.get_pretty_path();
+                                let path = device_info.path().to_str().unwrap().to_string();
+                                trace!("Found Ledger device: {:?}", info);
+                                detected_devices.push(Device {
+                                    path,
+                                    info,
+                                    wallet_type: RemoteWalletType::Ledger(Rc::new(ledger)),
+                                })
+                            }
+                            Err(err) => {
+                                error!("Error connecting to Ledger device to read info: {}", err);
+                                errors.push(err)
+                            }
                         }
                     }
+                    Err(err) => error!("Error connecting to Ledger device to read info: {}", err),
                 }
-                Err(err) => error!("Error connecting to ledger device to read info: {}", err),
+            } else if is_valid_keystone(vendor_id, product_id) {
+                println!("is_valid_keystone: true");
+                let path = device_info.path().to_str().unwrap().to_string();
+                println!("path: {}", path);
+                println!("device_info: {:?}", device_info);
+                match KeystoneWallet::new(path.clone()) {
+                    Ok(keystone) => {
+                        let info = keystone.get_device_info()?;
+                        println!("info: {:?}", info);
+                        trace!("Found Keystone device: {:?}", info);
+                        detected_devices.push(Device {
+                            path,
+                            info,
+                            wallet_type: RemoteWalletType::Keystone(Rc::new(keystone)),
+                        })
+                    }
+                    Err(err) => {
+                        error!("Error connecting to Keystone device to read info: {}", err);
+                        errors.push(err)
+                    }
+                }
+                // } else if is_valid_trezor(vendor_id, product_id) {
+                //     let path = device_info.path().to_str().unwrap().to_string();
+                //     match TrezorWallet::new(path.clone()) {
+                //         Ok(trezor) => {
+                //             let info = trezor.get_device_info()?;
+                //             trace!("Found Trezor device: {:?}", info);
+                //             detected_devices.push(Device {
+                //                 path,
+                //                 info,
+                //                 wallet_type: RemoteWalletType::Trezor(Rc::new(trezor)),
+                //             })
+                //         }
+                //         Err(err) => {
+                //             error!("Error connecting to Trezor device to read info: {}", err);
+                //             errors.push(err)
+                //         }
+                //     }
             }
         }
 
@@ -167,22 +214,48 @@ impl RemoteWalletManager {
         self.devices.read().iter().map(|d| d.info.clone()).collect()
     }
 
-    /// Get a particular wallet
-    #[allow(unreachable_patterns)]
-    pub fn get_ledger(
+    /// Get a particular wallet by type
+    pub fn get_wallet(
         &self,
         host_device_path: &str,
-    ) -> Result<Rc<LedgerWallet>, RemoteWalletError> {
+    ) -> Result<RemoteWalletType, RemoteWalletError> {
         self.devices
             .read()
             .iter()
             .find(|device| device.info.host_device_path == host_device_path)
+            .map(|device| device.wallet_type.clone())
             .ok_or(RemoteWalletError::PubkeyNotFound)
-            .and_then(|device| match &device.wallet_type {
-                RemoteWalletType::Ledger(ledger) => Ok(ledger.clone()),
-                _ => Err(RemoteWalletError::DeviceTypeMismatch),
-            })
     }
+
+    /// Get a Ledger wallet (backward compatibility)
+    pub fn get_ledger(
+        &self,
+        host_device_path: &str,
+    ) -> Result<Rc<LedgerWallet>, RemoteWalletError> {
+        match self.get_wallet(host_device_path)? {
+            RemoteWalletType::Ledger(ledger) => Ok(ledger),
+            _ => Err(RemoteWalletError::DeviceTypeMismatch),
+        }
+    }
+
+    /// Get a Keystone wallet
+    pub fn get_keystone(
+        &self,
+        host_device_path: &str,
+    ) -> Result<Rc<KeystoneWallet>, RemoteWalletError> {
+        match self.get_wallet(host_device_path)? {
+            RemoteWalletType::Keystone(keystone) => Ok(keystone),
+            _ => Err(RemoteWalletError::DeviceTypeMismatch),
+        }
+    }
+
+    /// Get a Trezor wallet
+    // pub fn get_trezor(
+    //     &self,
+    //     host_device_path: &str,
+    // ) -> Result<Rc<TrezorWallet>, RemoteWalletError> {
+    //     self.get_wallet(host_device_path)
+    // }
 
     /// Get wallet info.
     pub fn get_wallet_info(&self, pubkey: &Pubkey) -> Option<RemoteWalletInfo> {
@@ -259,9 +332,11 @@ pub struct Device {
 }
 
 /// Remote wallet convenience enum to hold various wallet types
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RemoteWalletType {
     Ledger(Rc<LedgerWallet>),
+    Keystone(Rc<KeystoneWallet>),
+    // Trezor(Rc<TrezorWallet>),
 }
 
 /// Remote wallet information.
