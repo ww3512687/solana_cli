@@ -20,7 +20,8 @@ use {
     rpassword::prompt_password,
     solana_remote_wallet::{
         remote_keypair::generate_remote_keypair,
-        remote_wallet::{maybe_wallet_manager, RemoteWalletError, RemoteWalletManager},
+        remote_wallet::{maybe_wallet_manager, RemoteWalletManager},
+        errors::RemoteWalletError,
     },
     solana_sdk::{
         derivation_path::DerivationPath,
@@ -641,6 +642,7 @@ pub fn signer_from_source_with_config(
         derivation_path,
         legacy,
     } = source;
+    println!("{}:{:?}", file!(), line!());
     match kind {
         SignerSourceKind::Prompt => {
             let skip_validation = matches.try_contains_id(SKIP_SEED_PHRASE_VALIDATION_ARG.name)?;
@@ -665,18 +667,27 @@ pub fn signer_from_source_with_config(
             Ok(Box::new(read_keypair(&mut stdin)?))
         }
         SignerSourceKind::Usb(locator) => {
+            println!("{}:{:?}", file!(), line!());
             if wallet_manager.is_none() {
                 *wallet_manager = maybe_wallet_manager()?;
             }
             if let Some(wallet_manager) = wallet_manager {
                 let confirm_key = matches.try_contains_id("confirm_key").unwrap_or(false);
-                Ok(Box::new(generate_remote_keypair(
+                println!("{}:{:?}", file!(), line!());
+                println!("locator: {:?}", locator);
+                println!("derivation_path: {:?}", derivation_path);
+                println!("confirm_key: {:?}", confirm_key);
+                println!("keypair_name: {:?}", keypair_name);
+
+                let data = generate_remote_keypair(
                     locator.clone(),
                     derivation_path.clone().unwrap_or_default(),
-                    wallet_manager,
+                    &wallet_manager,
                     confirm_key,
                     keypair_name,
-                )?))
+                )?;
+                let data = Box::new(data);
+                Ok(data)
             } else {
                 Err(RemoteWalletError::NoDeviceFound.into())
             }

@@ -1,6 +1,7 @@
 use {
-    crate::remote_wallet::{
-        RemoteWallet, RemoteWalletError, RemoteWalletInfo, RemoteWalletManager,
+    crate::{
+        errors::RemoteWalletError,
+        remote_wallet::{RemoteWallet, RemoteWalletInfo, RemoteWalletManager},
     },
     console::Emoji,
     dialoguer::{theme::ColorfulTheme, Select},
@@ -594,6 +595,7 @@ pub fn get_ledger_from_info(
     wallet_manager: &RemoteWalletManager,
 ) -> Result<Rc<LedgerWallet>, RemoteWalletError> {
     let devices = wallet_manager.list_devices();
+    println!("devices: {:?}", devices);
     let mut matches = devices
         .iter()
         .filter(|&device_info| device_info.matches(&info));
@@ -613,6 +615,7 @@ pub fn get_ledger_from_info(
             (device_info.host_device_path.clone(), query_item)
         })
         .collect();
+    println!("matches: {:?}", matches);
     if matches.is_empty() {
         return Err(RemoteWalletError::NoDeviceFound);
     }

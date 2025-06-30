@@ -3,9 +3,10 @@ use {
         ledger::get_ledger_from_info,
         locator::{Locator, Manufacturer},
         remote_wallet::{
-            RemoteWallet, RemoteWalletError, RemoteWalletInfo, RemoteWalletManager,
+            RemoteWallet, RemoteWalletInfo, RemoteWalletManager,
             RemoteWalletType,
         },
+        errors::RemoteWalletError,
     },
     solana_sdk::{
         derivation_path::DerivationPath,
@@ -67,6 +68,7 @@ pub fn generate_remote_keypair(
     keypair_name: &str,
 ) -> Result<RemoteKeypair, RemoteWalletError> {
     let remote_wallet_info = RemoteWalletInfo::parse_locator(locator);
+    println!("remote_wallet_info: {:?}", remote_wallet_info);
     if remote_wallet_info.manufacturer == Manufacturer::Ledger {
         let ledger = get_ledger_from_info(remote_wallet_info, keypair_name, wallet_manager)?;
         let path = format!("{}{}", ledger.pretty_path, derivation_path.get_query());
