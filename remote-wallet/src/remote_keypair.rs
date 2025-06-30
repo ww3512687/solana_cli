@@ -15,6 +15,7 @@ use {
         pubkey::Pubkey,
         signature::{Signature, Signer, SignerError},
     },
+    std::rc::Rc,
 };
 
 pub struct RemoteKeypair {
@@ -72,6 +73,28 @@ impl Signer for RemoteKeypair {
     }
 }
 
+/// Get a Keystone wallet from device info
+pub fn get_keystone_from_info(
+    remote_wallet_info: RemoteWalletInfo,
+    keypair_name: &str,
+    wallet_manager: &RemoteWalletManager,
+) -> Result<Rc<KeystoneWallet>, RemoteWalletError> {
+    // Find the device in the wallet manager
+    let devices = wallet_manager.list_devices();
+    let device = devices
+        .iter()
+        .find(|device| device.matches(&remote_wallet_info))
+        .ok_or(RemoteWalletError::PubkeyNotFound)?;
+
+    // Get the wallet from the manager
+    let wallet_type = wallet_manager.get_wallet(&device.host_device_path)?;
+    // TODO: Implement get_keystone_from_info function
+    match wallet_type {
+        RemoteWalletType::Keystone(keystone) => Ok(keystone),
+        _ => Err(RemoteWalletError::DeviceTypeMismatch),
+    }
+}
+
 pub fn generate_remote_keypair(
     locator: Locator,
     derivation_path: DerivationPath,
@@ -93,8 +116,14 @@ pub fn generate_remote_keypair(
             )?)
         }
         Manufacturer::Keystone => {
-            // TODO: Implement get_keystone_from_info function
-            Err(RemoteWalletError::DeviceTypeMismatch)
+            let keystone = get_keystone_from_info(remote_wallet_info, keypair_name, wallet_manager)?;
+            let path = format!("usb://keystone{}", derivation_path.get_query());
+            Ok(RemoteKeypair::new(
+                RemoteWalletType::Keystone(keystone),
+                derivation_path,
+                confirm_key,
+                path,
+            )?)
         }
         // Manufacturer::Trezor => {
         //     // TODO: Implement get_trezor_from_info function

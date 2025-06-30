@@ -155,9 +155,10 @@ impl RemoteWalletManager {
                 println!("is_valid_keystone: true");
                 let path = device_info.path().to_str().unwrap().to_string();
                 println!("path: {}", path);
-                println!("device_info: {:?}", device_info);
+                println!("device_info: {:?}...", device_info);
                 match KeystoneWallet::new(path.clone()) {
                     Ok(keystone) => {
+                        println!("keystone: {:?}", keystone);
                         let info = keystone.get_device_info()?;
                         println!("info: {:?}", info);
                         trace!("Found Keystone device: {:?}", info);

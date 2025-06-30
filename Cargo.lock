@@ -4760,6 +4760,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_cbor"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2bef2ebfde456fb76bbcf9f59315333decc4fda0b2b44b420243c11e0f5ec1f5"
+dependencies = [
+ "half",
+ "serde",
+]
+
+[[package]]
 name = "serde_derive"
 version = "1.0.197"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6720,6 +6730,7 @@ name = "solana-remote-wallet"
 version = "2.0.0"
 dependencies = [
  "assert_matches",
+ "base64 0.22.0",
  "console",
  "dialoguer",
  "hidapi",
@@ -6729,6 +6740,9 @@ dependencies = [
  "parking_lot 0.12.1",
  "qstring",
  "semver 1.0.22",
+ "serde",
+ "serde_cbor",
+ "serde_json",
  "solana-sdk",
  "thiserror",
  "uriparse",
