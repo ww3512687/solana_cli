@@ -22,6 +22,8 @@ semver = { workspace = true }
 solana-sdk = { workspace = true }
 thiserror = { workspace = true }
 uriparse = { workspace = true }
+# ur-registry = {workspace = true }
+# ur-parse-lib = {workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

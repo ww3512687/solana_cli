@@ -213,7 +213,6 @@ dependencies = [
  "itertools",
  "num-bigint 0.4.4",
  "num-traits",
- "paste",
  "rustc_version",
  "zeroize",
 ]
@@ -3289,13 +3288,6 @@ dependencies = [
  "smallvec",
  "windows-targets 0.48.0",
 ]
-
-[[package]]
-name = "paste"
-version = "1.0.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1de2e551fb905ac83f73f7aedf2f0cb4a0da7e35efa24a202a936269f1f18e1"
-
 [[package]]
 name = "pbkdf2"
 version = "0.4.0"
@@ -3699,7 +3691,6 @@ dependencies = [
  "rustls-native-certs",
  "slab",
  "thiserror",
- "tinyvec",
  "tracing",
 ]
 
@@ -7249,15 +7240,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tinyvec"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "317cca572a0e89c3ce0ca1f1bdc9369547fe318a683418e42ac8f59d14701023"
-dependencies = [
- "tinyvec_macros",
-]
-
-[[package]]
 name = "tinyvec_macros"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7620,15 +7602,6 @@ name = "unicode-ident"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "15c61ba63f9235225a22310255a29b806b907c9b8c964bcbd0a2c70f3f2deea7"
-
-[[package]]
-name = "unicode-normalization"
-version = "0.1.22"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c5713f0fc4b5db668a2ac63cdb7bb4469d8c9fed047b1d0292cc7b0ce2ba921"
-dependencies = [
- "tinyvec",
-]
 
 [[package]]
 name = "unicode-width"
