@@ -1,6 +1,6 @@
 use {
     crate::{
-        ledger::get_ledger_from_info,
+        wallet::ledger::ledger::get_ledger_from_info,
         locator::{Locator, Manufacturer},
         remote_wallet::{
             RemoteWallet, RemoteWalletInfo, RemoteWalletManager,
@@ -31,6 +31,7 @@ impl RemoteKeypair {
     ) -> Result<Self, RemoteWalletError> {
         let pubkey = match &wallet_type {
             RemoteWalletType::Ledger(wallet) => wallet.get_pubkey(&derivation_path, confirm_key)?,
+            RemoteWalletType::Keystone(wallet) => wallet.get_pubkey(&derivation_path, confirm_key)?,
         };
 
         Ok(Self {
@@ -50,6 +51,9 @@ impl Signer for RemoteKeypair {
     fn try_sign_message(&self, message: &[u8]) -> Result<Signature, SignerError> {
         match &self.wallet_type {
             RemoteWalletType::Ledger(wallet) => wallet
+                .sign_message(&self.derivation_path, message)
+                .map_err(|e| e.into()),
+            RemoteWalletType::Keystone(wallet) => wallet
                 .sign_message(&self.derivation_path, message)
                 .map_err(|e| e.into()),
         }
@@ -82,3 +86,5 @@ pub fn generate_remote_keypair(
         Err(RemoteWalletError::DeviceTypeMismatch)
     }
 }
+
+

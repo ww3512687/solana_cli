@@ -23,9 +23,23 @@ impl RemoteWalletManager {
     }
 
     /// 更新设备列表
-    pub fn update_devices(&self) -> Result<usize, RemoteWalletError> {
-        // TODO: 实现设备发现逻辑
-        Ok(0)
+    pub fn update_devices(&mut self) -> Result<usize, RemoteWalletError> {
+        #[cfg(feature = "hidapi")]
+        {
+            let hidapi = hidapi::HidApi::new()?;
+            for device_info in hidapi.device_list() {
+                if crate::ledger::is_valid_ledger(device_info.vendor_id(), device_info.product_id()) {
+                    let wallet = crate::wallet_impl::ledger::LedgerWallet::new(device_info)?;
+                    let path = wallet.pretty_path.clone();
+                    self.add_wallet(path, Rc::new(wallet));
+                }
+            }
+            Ok(self.wallets.len())
+        }
+        #[cfg(not(feature = "hidapi"))]
+        {
+            Err(RemoteWalletError::Hid("hidapi not available".to_string()))
+        }
     }
 
     /// 列出所有设备

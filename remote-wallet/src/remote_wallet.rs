@@ -1,9 +1,9 @@
 #[cfg(feature = "hidapi")]
-use {crate::ledger::is_valid_ledger, parking_lot::Mutex, std::sync::Arc};
+use {crate::wallet::ledger::ledger::is_valid_ledger, parking_lot::Mutex, std::sync::Arc};
 use {
     crate::{
-        ledger::LedgerWallet,
-        ledger_error::LedgerError,
+        wallet::ledger::ledger::LedgerWallet,
+        wallet::keystone::keystone::KeystoneWallet,
         locator::{Locator, LocatorError, Manufacturer},
     },
     log::*,
@@ -121,6 +121,21 @@ impl RemoteWalletManager {
             })
     }
 
+    pub fn get_keystone(
+        &self,
+        host_device_path: &str,
+    ) -> Result<Rc<KeystoneWallet>, RemoteWalletError> {
+        self.devices
+            .read()
+            .iter()
+            .find(|device| device.info.host_device_path == host_device_path)
+            .ok_or(RemoteWalletError::PubkeyNotFound)
+            .and_then(|device| match &device.wallet_type {
+                RemoteWalletType::Keystone(keystone) => Ok(keystone.clone()),
+                _ => Err(RemoteWalletError::DeviceTypeMismatch),
+            })
+    }
+
     /// Get wallet info.
     pub fn get_wallet_info(&self, pubkey: &Pubkey) -> Option<RemoteWalletInfo> {
         self.devices
@@ -199,6 +214,7 @@ pub struct Device {
 #[derive(Debug)]
 pub enum RemoteWalletType {
     Ledger(Rc<LedgerWallet>),
+    Keystone(Rc<KeystoneWallet>),
 }
 
 /// Remote wallet information.

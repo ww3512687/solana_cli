@@ -7,9 +7,9 @@
 // pub mod transport;
 // pub mod protocol;
 
+pub mod wallet;
+
 // 现有模块（保持向后兼容）
-pub mod ledger;
-pub mod ledger_error;
 pub mod locator;
 pub mod remote_keypair;
 pub mod remote_wallet;

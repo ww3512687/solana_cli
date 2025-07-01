@@ -3,6 +3,7 @@ use {
         errors::RemoteWalletError,
         remote_wallet::{RemoteWallet, RemoteWalletInfo, RemoteWalletManager},
     },
+    super::error::LedgerError,
     console::Emoji,
     dialoguer::{theme::ColorfulTheme, Select},
     semver::Version as FirmwareVersion,
@@ -11,7 +12,7 @@ use {
 };
 #[cfg(feature = "hidapi")]
 use {
-    crate::{ledger_error::LedgerError, locator::Manufacturer},
+    crate::locator::Manufacturer,
     log::*,
     num_traits::FromPrimitive,
     solana_sdk::{pubkey::Pubkey, signature::Signature},
