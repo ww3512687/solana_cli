@@ -91,5 +91,4 @@ pub enum KeystoneError {
 
     #[error("Ledger received invalid CLA")]
     InvalidCla = 0x6e00,
-
 }

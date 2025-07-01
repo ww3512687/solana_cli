@@ -1,9 +1,10 @@
 use {
+    super::error::KeystoneError,
     crate::{
         errors::RemoteWalletError,
         remote_wallet::{RemoteWallet, RemoteWalletInfo, RemoteWalletManager},
+        wallet::WalletProbe,
     },
-    super::error::KeystoneError,
     console::Emoji,
     dialoguer::{theme::ColorfulTheme, Select},
     semver::Version as FirmwareVersion,
@@ -35,24 +36,10 @@ const MAX_CHUNK_SIZE: usize = 255;
 
 const APDU_SUCCESS_CODE: usize = 0x9000;
 
-/// Ledger vendor ID
-const LEDGER_VID: u16 = 0x2c97;
-/// Ledger product IDs
-const LEDGER_NANO_S_PIDS: [u16; 33] = [
-    0x0001, 0x1000, 0x1001, 0x1002, 0x1003, 0x1004, 0x1005, 0x1006, 0x1007, 0x1008, 0x1009, 0x100a,
-    0x100b, 0x100c, 0x100d, 0x100e, 0x100f, 0x1010, 0x1011, 0x1012, 0x1013, 0x1014, 0x1015, 0x1016,
-    0x1017, 0x1018, 0x1019, 0x101a, 0x101b, 0x101c, 0x101d, 0x101e, 0x101f,
-];
-const LEDGER_NANO_X_PIDS: [u16; 33] = [
-    0x0004, 0x4000, 0x4001, 0x4002, 0x4003, 0x4004, 0x4005, 0x4006, 0x4007, 0x4008, 0x4009, 0x400a,
-    0x400b, 0x400c, 0x400d, 0x400e, 0x400f, 0x4010, 0x4011, 0x4012, 0x4013, 0x4014, 0x4015, 0x4016,
-    0x4017, 0x4018, 0x4019, 0x401a, 0x401b, 0x401c, 0x401d, 0x401e, 0x401f,
-];
-const LEDGER_NANO_S_PLUS_PIDS: [u16; 33] = [
-    0x0005, 0x5000, 0x5001, 0x5002, 0x5003, 0x5004, 0x5005, 0x5006, 0x5007, 0x5008, 0x5009, 0x500a,
-    0x500b, 0x500c, 0x500d, 0x500e, 0x500f, 0x5010, 0x5011, 0x5012, 0x5013, 0x5014, 0x5015, 0x5016,
-    0x5017, 0x5018, 0x5019, 0x501a, 0x501b, 0x501c, 0x501d, 0x501e, 0x501f,
-];
+/// Keystone vendor ID
+const KEYSTONE_VID: u16 = 0x1209;
+/// Keystone product IDs
+const KEYSTONE_PID: u16 = 0x3001;
 const LEDGER_TRANSPORT_HEADER_LEN: usize = 5;
 
 const HID_PACKET_SIZE: usize = 64 + HID_PREFIX_ZERO;
@@ -361,12 +348,41 @@ impl KeystoneWallet {
     }
 }
 
+use crate::remote_wallet::{Device, RemoteWalletType};
+use hidapi::{DeviceInfo, HidApi};
+
+pub struct KeystoneProbe;
+#[cfg(not(feature = "hidapi"))]
+impl WalletProbe<Self> for KeystoneProbe {}
+#[cfg(feature = "hidapi")]
+impl WalletProbe for KeystoneProbe {
+    fn is_supported_device(&self, device_info: &hidapi::DeviceInfo) -> bool {
+        device_info.product_id() == KEYSTONE_PID && device_info.vendor_id() == KEYSTONE_VID
+    }
+
+    fn open(&self, usb: &mut HidApi, devinfo: DeviceInfo) -> Result<Device, RemoteWalletError> {
+        let handle = usb
+            .open_path(devinfo.path())
+            .map_err(|e| RemoteWalletError::Hid(e.to_string()))?;
+        let mut wallet = KeystoneWallet::new(handle);
+        let info = wallet
+            .read_device(&devinfo)
+            .map_err(|e| RemoteWalletError::Hid(e.to_string()))?;
+        wallet.pretty_path = info.get_pretty_path();
+        Ok(Device {
+            path: devinfo.path().to_string_lossy().into_owned(),
+            info,
+            wallet_type: RemoteWalletType::Keystone(Rc::new(wallet)),
+        })
+    }
+}
+
 #[cfg(not(feature = "hidapi"))]
 impl RemoteWallet<Self> for KeystoneWallet {}
 #[cfg(feature = "hidapi")]
 impl RemoteWallet<hidapi::DeviceInfo> for KeystoneWallet {
     fn name(&self) -> &str {
-        "Ledger hardware wallet"
+        "Keystone hardware wallet"
     }
 
     fn read_device(
@@ -553,16 +569,6 @@ impl RemoteWallet<hidapi::DeviceInfo> for KeystoneWallet {
         Signature::try_from(result)
             .map_err(|_| RemoteWalletError::Protocol("Signature packet size mismatch"))
     }
-}
-
-/// Check if the detected device is a valid `Ledger device` by checking both the product ID and the vendor ID
-pub fn is_valid_ledger(vendor_id: u16, product_id: u16) -> bool {
-    let product_ids = [
-        LEDGER_NANO_S_PIDS,
-        LEDGER_NANO_X_PIDS,
-        LEDGER_NANO_S_PLUS_PIDS,
-    ];
-    vendor_id == LEDGER_VID && product_ids.iter().any(|pids| pids.contains(&product_id))
 }
 
 /// Build the derivation path byte array from a DerivationPath selection

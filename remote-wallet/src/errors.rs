@@ -1,8 +1,8 @@
-use thiserror::Error;
-use solana_sdk::{derivation_path::DerivationPathError, signature::SignerError};
-use crate::wallet::ledger::error::LedgerError;
-use crate::wallet::keystone::error::KeystoneError;
 use crate::locator::LocatorError;
+use crate::wallet::keystone::error::KeystoneError;
+use crate::wallet::ledger::error::LedgerError;
+use solana_sdk::{derivation_path::DerivationPathError, signature::SignerError};
+use thiserror::Error;
 
 /// Remote wallet error.
 #[derive(Error, Debug, Clone)]

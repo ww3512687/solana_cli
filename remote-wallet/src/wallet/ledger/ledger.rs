@@ -1,9 +1,10 @@
 use {
+    super::error::LedgerError,
     crate::{
         errors::RemoteWalletError,
         remote_wallet::{RemoteWallet, RemoteWalletInfo, RemoteWalletManager},
+        wallet::WalletProbe,
     },
-    super::error::LedgerError,
     console::Emoji,
     dialoguer::{theme::ColorfulTheme, Select},
     semver::Version as FirmwareVersion,
@@ -358,6 +359,36 @@ impl LedgerWallet {
         } else {
             Err(RemoteWalletError::Protocol("Unknown error"))
         }
+    }
+}
+
+use crate::remote_wallet::{Device, RemoteWalletType};
+use hidapi::{DeviceInfo, HidApi};
+
+pub struct LedgerProbe;
+
+#[cfg(not(feature = "hidapi"))]
+impl WalletProbe<Self> for LedgerProbe {}
+#[cfg(feature = "hidapi")]
+impl WalletProbe for LedgerProbe {
+    fn is_supported_device(&self, device_info: &hidapi::DeviceInfo) -> bool {
+        is_valid_ledger(device_info.vendor_id(), device_info.product_id())
+    }
+
+    fn open(&self, usb: &mut HidApi, devinfo: DeviceInfo) -> Result<Device, RemoteWalletError> {
+        let handle = usb
+            .open_path(devinfo.path())
+            .map_err(|e| RemoteWalletError::Hid(e.to_string()))?;
+        let mut wallet = LedgerWallet::new(handle);
+        let info = wallet
+            .read_device(&devinfo)
+            .map_err(|e| RemoteWalletError::Hid(e.to_string()))?;
+        wallet.pretty_path = info.get_pretty_path();
+        Ok(Device {
+            path: devinfo.path().to_string_lossy().into_owned(),
+            info,
+            wallet_type: RemoteWalletType::Ledger(Rc::new(wallet)),
+        })
     }
 }
 

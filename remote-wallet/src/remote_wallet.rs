@@ -1,10 +1,8 @@
-#[cfg(feature = "hidapi")]
-use {crate::wallet::ledger::ledger::is_valid_ledger, parking_lot::Mutex, std::sync::Arc};
 use {
+    crate::errors::RemoteWalletError,
     crate::{
-        wallet::ledger::ledger::LedgerWallet,
-        wallet::keystone::keystone::KeystoneWallet,
         locator::{Locator, LocatorError, Manufacturer},
+        wallet::{keystone::keystone::KeystoneWallet, ledger::ledger::LedgerWallet, WalletProbe},
     },
     log::*,
     parking_lot::RwLock,
@@ -17,13 +15,12 @@ use {
         rc::Rc,
         time::{Duration, Instant},
     },
-    crate::errors::RemoteWalletError,
 };
+#[cfg(feature = "hidapi")]
+use {hidapi::DeviceInfo, parking_lot::Mutex, std::sync::Arc};
 
 const HID_GLOBAL_USAGE_PAGE: u16 = 0xFF00;
 const HID_USB_DEVICE_CLASS: u8 = 0;
-
-
 
 /// Collection of connected RemoteWallets
 pub struct RemoteWalletManager {
@@ -48,48 +45,31 @@ impl RemoteWalletManager {
     pub fn update_devices(&self) -> Result<usize, RemoteWalletError> {
         let mut usb = self.usb.lock();
         usb.refresh_devices()?;
-        let devices = usb.device_list();
-        let num_prev_devices = self.devices.read().len();
 
-        let mut detected_devices = vec![];
-        let mut errors = vec![];
-        for device_info in devices.filter(|&device_info| {
-            is_valid_hid_device(device_info.usage_page(), device_info.interface_number())
-                && is_valid_ledger(device_info.vendor_id(), device_info.product_id())
-        }) {
-            match usb.open_path(device_info.path()) {
-                Ok(device) => {
-                    let mut ledger = LedgerWallet::new(device);
-                    let result = ledger.read_device(device_info);
-                    match result {
-                        Ok(info) => {
-                            ledger.pretty_path = info.get_pretty_path();
-                            let path = device_info.path().to_str().unwrap().to_string();
-                            trace!("Found device: {:?}", info);
-                            detected_devices.push(Device {
-                                path,
-                                info,
-                                wallet_type: RemoteWalletType::Ledger(Rc::new(ledger)),
-                            })
-                        }
-                        Err(err) => {
-                            error!("Error connecting to ledger device to read info: {}", err);
-                            errors.push(err)
-                        }
-                    }
-                }
-                Err(err) => error!("Error connecting to ledger device to read info: {}", err),
-            }
-        }
+        let prev = self.devices.read().len();
+        use crate::wallet::{keystone::keystone::KeystoneProbe, ledger::ledger::LedgerProbe};
+        let probes: Vec<Box<dyn WalletProbe>> =
+            vec![Box::new(LedgerProbe), Box::new(KeystoneProbe)];
 
-        let num_curr_devices = detected_devices.len();
-        *self.devices.write() = detected_devices;
+        let devinfos: Vec<DeviceInfo> = usb
+            .device_list()
+            .filter(|d| is_valid_hid_device(d.usage_page(), d.interface_number()))
+            .cloned()
+            .collect();
 
-        if num_curr_devices == 0 && !errors.is_empty() {
-            return Err(errors[0].clone());
-        }
+        let (oks, errs): (Vec<_>, Vec<_>) = devinfos
+            .into_iter()
+            .filter_map(|devinfo| {
+                probes
+                    .iter()
+                    .find(|p| p.is_supported_device(&devinfo))
+                    .map(|p| p.open(&mut usb, devinfo))
+            })
+            .partition(Result::is_ok);
 
-        Ok(num_curr_devices - num_prev_devices)
+        *self.devices.write() = oks.into_iter().map(Result::unwrap).collect::<Vec<_>>();
+
+        Ok(self.devices.read().len() - prev)
     }
 
     #[cfg(not(feature = "hidapi"))]
