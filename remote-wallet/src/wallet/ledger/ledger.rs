@@ -3,7 +3,7 @@ use {
     crate::{
         errors::RemoteWalletError,
         remote_wallet::{RemoteWallet, RemoteWalletInfo, RemoteWalletManager},
-        wallet::WalletProbe,
+        wallet::{types::{Device, RemoteWalletType}, WalletProbe},
     },
     console::Emoji,
     dialoguer::{theme::ColorfulTheme, Select},
@@ -362,7 +362,6 @@ impl LedgerWallet {
     }
 }
 
-use crate::remote_wallet::{Device, RemoteWalletType};
 use hidapi::{DeviceInfo, HidApi};
 
 pub struct LedgerProbe;

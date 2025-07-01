@@ -2,7 +2,7 @@ use {
     crate::errors::RemoteWalletError,
     crate::{
         locator::{Locator, LocatorError, Manufacturer},
-        wallet::{keystone::keystone::KeystoneWallet, ledger::ledger::LedgerWallet, WalletProbe},
+        wallet::{keystone::keystone::KeystoneWallet, ledger::ledger::LedgerWallet, types::{Device, RemoteWalletType}, WalletProbe},
     },
     log::*,
     parking_lot::RwLock,
@@ -179,22 +179,6 @@ pub trait RemoteWallet<T> {
     ) -> Result<Signature, RemoteWalletError> {
         unimplemented!();
     }
-}
-
-/// `RemoteWallet` device
-#[derive(Debug)]
-pub struct Device {
-    #[allow(dead_code)]
-    pub(crate) path: String,
-    pub(crate) info: RemoteWalletInfo,
-    pub wallet_type: RemoteWalletType,
-}
-
-/// Remote wallet convenience enum to hold various wallet types
-#[derive(Debug)]
-pub enum RemoteWalletType {
-    Ledger(Rc<LedgerWallet>),
-    Keystone(Rc<KeystoneWallet>),
 }
 
 /// Remote wallet information.

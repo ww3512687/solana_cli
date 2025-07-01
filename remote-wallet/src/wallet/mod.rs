@@ -1,10 +1,12 @@
 pub mod errors;
 pub mod keystone;
 pub mod ledger;
+pub mod types;
 
 use crate::errors::RemoteWalletError;
-use crate::remote_wallet::Device;
 use hidapi::{DeviceInfo, HidApi};
+
+use types::Device;
 
 pub trait WalletProbe {
     /// 判断这个 probe 是否支持给定设备

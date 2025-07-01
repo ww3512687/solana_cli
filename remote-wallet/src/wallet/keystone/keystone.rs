@@ -3,7 +3,7 @@ use {
     crate::{
         errors::RemoteWalletError,
         remote_wallet::{RemoteWallet, RemoteWalletInfo, RemoteWalletManager},
-        wallet::WalletProbe,
+        wallet::{types::Device, WalletProbe},
     },
     console::Emoji,
     dialoguer::{theme::ColorfulTheme, Select},
@@ -348,7 +348,7 @@ impl KeystoneWallet {
     }
 }
 
-use crate::remote_wallet::{Device, RemoteWalletType};
+use crate::wallet::types::{RemoteWalletType};
 use hidapi::{DeviceInfo, HidApi};
 
 pub struct KeystoneProbe;

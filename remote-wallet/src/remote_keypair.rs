@@ -2,8 +2,8 @@ use {
     crate::{
         errors::RemoteWalletError,
         locator::{Locator, Manufacturer},
-        remote_wallet::{RemoteWallet, RemoteWalletInfo, RemoteWalletManager, RemoteWalletType},
-        wallet::ledger::ledger::get_ledger_from_info,
+        remote_wallet::{RemoteWallet, RemoteWalletInfo, RemoteWalletManager},
+        wallet::{ledger::ledger::get_ledger_from_info, types::RemoteWalletType},
     },
     solana_sdk::{
         derivation_path::DerivationPath,
