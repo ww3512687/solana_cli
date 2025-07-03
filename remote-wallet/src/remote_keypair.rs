@@ -1,4 +1,5 @@
 use {
+    crate::debug_print,
     crate::{
         errors::RemoteWalletError,
         locator::{Locator, Manufacturer},
@@ -74,7 +75,6 @@ pub fn generate_remote_keypair(
     keypair_name: &str,
 ) -> Result<RemoteKeypair, RemoteWalletError> {
     let remote_wallet_info = RemoteWalletInfo::parse_locator(locator);
-    println!("remote_wallet_info: {:?}", remote_wallet_info);
     if remote_wallet_info.manufacturer == Manufacturer::Ledger {
         let ledger = get_ledger_from_info(remote_wallet_info, keypair_name, wallet_manager)?;
         let path = format!("{}{}", ledger.pretty_path, derivation_path.get_query());
@@ -87,6 +87,7 @@ pub fn generate_remote_keypair(
     } else if remote_wallet_info.manufacturer == Manufacturer::Keystone {
         let keystone = get_keystone_from_info(remote_wallet_info, keypair_name, wallet_manager)?;
         let path = format!("{}{}", keystone.pretty_path, derivation_path.get_query());
+        debug_print!("path: {:?}", path);
         Ok(RemoteKeypair::new(
             RemoteWalletType::Keystone(keystone),
             derivation_path,

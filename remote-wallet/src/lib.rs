@@ -7,3 +7,10 @@ pub mod protocol;
 pub mod remote_keypair;
 pub mod remote_wallet;
 pub mod wallet;
+
+#[macro_export]
+macro_rules! debug_print {
+    ($($arg:tt)*) => {
+        println!("{}:{:?} {}", file!(), line!(), format!($($arg)*));
+    };
+}

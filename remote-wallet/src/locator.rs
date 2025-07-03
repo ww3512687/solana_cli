@@ -41,6 +41,7 @@ impl FromStr for Manufacturer {
         let s = s.to_ascii_lowercase();
         match s.as_str() {
             MANUFACTURER_LEDGER => Ok(Self::Ledger),
+            MANUFACTURER_KEYSTONE => Ok(Self::Keystone),
             _ => Err(ManufacturerError),
         }
     }

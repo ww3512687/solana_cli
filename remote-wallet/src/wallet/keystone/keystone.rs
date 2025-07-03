@@ -1,16 +1,29 @@
 use {
     super::error::KeystoneError,
     crate::{
+        debug_print,
         errors::RemoteWalletError,
         remote_wallet::{RemoteWallet, RemoteWalletInfo, RemoteWalletManager},
         wallet::{types::Device, WalletProbe},
     },
     console::Emoji,
     dialoguer::{theme::ColorfulTheme, Select},
+    hex,
     semver::Version as FirmwareVersion,
+    serde_json,
     solana_sdk::derivation_path::DerivationPath,
     std::{fmt, rc::Rc},
-    serde_json,
+    ur_parse_lib::keystone_ur_decoder::{probe_decode, URParseResult},
+    ur_parse_lib::keystone_ur_encoder::probe_encode,
+    ur_registry::crypto_key_path::{CryptoKeyPath, PathComponent},
+    ur_registry::extend::crypto_multi_accounts::CryptoMultiAccounts,
+    ur_registry::extend::key_derivation::KeyDerivationCall,
+    ur_registry::extend::key_derivation_schema::{Curve, KeyDerivationSchema},
+    ur_registry::extend::qr_hardware_call::{
+        CallParams, CallType, HardWareCallVersion, QRHardwareCall,
+    },
+    ur_registry::registry_types::URType,
+    ur_registry::traits::RegistryItem,
 };
 #[cfg(feature = "hidapi")]
 use {
@@ -48,7 +61,7 @@ const HID_PREFIX_ZERO: usize = 1;
 #[cfg(not(windows))]
 const HID_PREFIX_ZERO: usize = 0;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum CommandType {
     CMD_ECHO_TEST = 0x01,
     CMD_RESOLVE_UR = 0x02,
@@ -61,11 +74,9 @@ enum CommandType {
 impl CommandType {
     /// Check if a u16 value corresponds to a valid CommandType
     fn is_valid_command(value: u16) -> bool {
-        matches!(value, 
-            0x01 | 0x02 | 0x03 | 0x04 | 0x05 | 0x06
-        )
+        matches!(value, 0x01 | 0x02 | 0x03 | 0x04 | 0x05 | 0x06)
     }
-    
+
     /// Try to convert u16 to CommandType
     fn from_u16(value: u16) -> Option<CommandType> {
         match value {
@@ -146,14 +157,7 @@ impl KeystoneWallet {
     //		* APDU_LENGTH 	        (1 byte (2 bytes DEPRECATED))
     //		* APDU_Payload				(Variable)
     //
-    fn write(
-        &self,
-        command: CommandType,
-        p1: u8,
-        p2: u8,
-        data: &[u8],
-        data_len: usize,
-    ) -> Result<(), RemoteWalletError> {
+    fn write(&self, command: CommandType, data: &[u8]) -> Result<(), RemoteWalletError> {
         let data_len = data.len();
         let mut offset = 0;
         let mut sequence_number = 0;
@@ -163,42 +167,42 @@ impl KeystoneWallet {
         } else {
             1
         };
-        let request_id = 0;
+        let mut request_id = 0;
 
         while sequence_number == 0 || offset < data_len {
-            let header = if sequence_number == 0 {
-                LEDGER_TRANSPORT_HEADER_LEN + APDU_PAYLOAD_HEADER_LEN
-            } else {
-                LEDGER_TRANSPORT_HEADER_LEN
-            };
+            // Clear the entire chunk to avoid residual data
+            hid_chunk.fill(0);
+
+            let header = 10;
             let size = min(64 - header, data_len - offset);
             {
                 let chunk = &mut hid_chunk[HID_PREFIX_ZERO..];
                 chunk[0..2].copy_from_slice(&[0x00, 0x00]);
-
-                if sequence_number == 0 {
-                    chunk[2..10].copy_from_slice(&[
-                        (command as u16 >> 8) as u8,
-                        (command as u16 & 0xff) as u8,
-                        (total_packets >> 8) as u8,
-                        (total_packets & 0xff) as u8,
-                        (sequence_number >> 8) as u8,
-                        (sequence_number & 0xff) as u8,
-                        (request_id >> 8) as u8,
-                        (request_id & 0xff) as u8,
-                    ]);
-                }
+                chunk[2..10].copy_from_slice(&[
+                    (command as u16 >> 8) as u8,
+                    (command as u16 & 0xff) as u8,
+                    (total_packets >> 8) as u8,
+                    (total_packets & 0xff) as u8,
+                    (sequence_number >> 8) as u8,
+                    (sequence_number & 0xff) as u8,
+                    (request_id >> 8) as u8,
+                    (request_id & 0xff) as u8,
+                ]);
 
                 chunk[header..header + size].copy_from_slice(&data[offset..offset + size]);
             }
             trace!("Ledger write {:?}", &hid_chunk[..]);
-            println!("send hid_chunk: {:?}", &hid_chunk[..]);
+            if command == CommandType::CMD_RESOLVE_UR {
+                // debug_print!("send hid_chunk (hex): {:02x?}", &hid_chunk[..]);
+                // debug_print!("send string: {:?}", String::from_utf8_lossy(&hid_chunk[..]));
+            }
             let n = self.device.write(&hid_chunk[..])?;
             if n < size + header {
                 return Err(RemoteWalletError::Protocol("Write data size mismatch"));
             }
             offset += size;
             sequence_number += 1;
+            request_id += 1;
             if sequence_number >= 0xffff {
                 return Err(RemoteWalletError::Protocol(
                     "Maximum sequence number reached",
@@ -228,40 +232,41 @@ impl KeystoneWallet {
         loop {
             // Read HID packet
             let n = self.device.read(&mut buffer)?;
-            println!("n: {:?}", n);
             if n < LEDGER_TRANSPORT_HEADER_LEN {
                 return Err(RemoteWalletError::Protocol("Invalid HID packet size"));
             }
 
             let packet = &buffer[HID_PREFIX_ZERO..n];
-            println!("packet: {:?}", packet);
-            
+            let packet = {
+                let mut end = packet.len();
+                while end > 0 && packet[end - 1] == 0x00 {
+                    end -= 1;
+                }
+                &packet[..end]
+            };
             // Parse transport header
             let cla = packet[0];
             let command = u16::from_be_bytes([packet[1], packet[2]]);
-            println!("command: {:?}", command);
             let total_packets = u16::from_be_bytes([packet[3], packet[4]]);
-            println!("total_packets: {:?}", total_packets);
             let packet_seq = u16::from_be_bytes([packet[5], packet[6]]);
-            println!("packet_seq: {:?}", packet_seq);
-            let packet_data = &packet[7..];
-            println!("packet_data (hex): {:02x?}", packet_data);
-            // Try to print as string if it's valid UTF-8
-            if let Ok(data_str) = std::str::from_utf8(packet_data) {
-                // Clean up the string by removing null characters
-                let cleaned_str = data_str.trim_matches('\0').trim();
-                println!("packet_data (string): {}", cleaned_str);
-                
-                // Try to parse as JSON if it looks like JSON
-                if cleaned_str.starts_with('{') && cleaned_str.ends_with('}') {
-                    match serde_json::from_str::<serde_json::Value>(cleaned_str) {
-                        Ok(json) => println!("packet_data (JSON): {}", serde_json::to_string_pretty(&json).unwrap_or_default()),
-                        Err(e) => println!("packet_data (JSON parse error): {}", e),
-                    }
-                }
-            } else {
-                println!("packet_data (string): <invalid UTF-8>");
+            let request_id = u16::from_be_bytes([packet[7], packet[8]]);
+            let packet_data = &packet[9..];
+            if command == CommandType::CMD_RESOLVE_UR as u16 {
+                // debug_print!("packet_length: {:?}", packet_data.len());
+                // debug_print!("packet: {:02x?}", packet_data);
+                // debug_print!("packet: {:?}\n", String::from_utf8_lossy(packet_data));
             }
+            // if let Ok(data_str) = std::str::from_utf8(packet_data) {
+            //     let cleaned_str = data_str.trim_matches('\0').trim();
+            //     if cleaned_str.starts_with('{') && cleaned_str.ends_with('}') {
+            //         match serde_json::from_str::<serde_json::Value>(cleaned_str) {
+            //             Ok(json) => println!("packet_data (JSON): {}", serde_json::to_string_pretty(&json).unwrap_or_default()),
+            //             Err(e) => println!("packet_data (JSON parse error): {}", e),
+            //         }
+            //     }
+            // } else {
+            //     println!("packet_data (string): <invalid UTF-8>");
+            // }
 
             // Check if command is valid
             if !CommandType::is_valid_command(command) {
@@ -276,9 +281,6 @@ impl KeystoneWallet {
                 return Err(RemoteWalletError::Protocol("Invalid packet sequence"));
             }
 
-            if sequence_number == 0 {
-            }
-
             sequence_number += 1;
             total_length += packet_data.len();
             result_data.extend_from_slice(packet_data);
@@ -289,73 +291,91 @@ impl KeystoneWallet {
             }
 
             if sequence_number >= 0xffff {
-                return Err(RemoteWalletError::Protocol("Maximum sequence number reached"));
+                return Err(RemoteWalletError::Protocol(
+                    "Maximum sequence number reached",
+                ));
             }
         }
 
         // Truncate to exact length
         result_data.truncate(total_length);
-        
+
         // Parse status code from last 2 bytes
         if result_data.len() < 2 {
             return Err(RemoteWalletError::Protocol("Response too short"));
         }
-        
+
         // let status_code = u16::from_be_bytes([
         //     result_data[result_data.len() - 2],
         //     result_data[result_data.len() - 1]
         // ]) as usize;
         // println!("status_code: {:?}", status_code);
-        
+
         // Self::parse_status(status_code)?;
-        
+
         // Remove status code from result
         result_data.truncate(result_data.len() - 2);
-        
+
         Ok(result_data)
     }
 
-    fn _send_apdu(
-        &self,
-        command: CommandType,
-        p1: u8,
-        p2: u8,
-        data: &[u8],
-        data_len: usize,
-    ) -> Result<String, RemoteWalletError> {
-        self.write(command, p1, p2, data, data_len)?;
-        if p1 == P1_CONFIRM && is_last_part(p2) {
-            println!(
-                "Waiting for your approval on {} {}",
-                self.name(),
-                self.pretty_path
-            );
-            let result = self.read()?;
-            println!("{CHECK_MARK}Approved");
-            Ok(String::from_utf8(result).unwrap())
-        } else {
-            let message = self.read()?;
-            println!("message: {:?}", message);
-            Ok(String::from_utf8(message).unwrap())
+    fn _send_apdu(&self, command: CommandType, data: &[u8]) -> Result<String, RemoteWalletError> {
+        self.write(command, data)?;
+        let message = self.read()?;
+        let message_str = String::from_utf8_lossy(&message);
+        if let (Some(start), Some(end)) = (message_str.find('{'), message_str.rfind('}')) {
+            if start < end {
+                let json_str = &message_str[start..=end];
+                return Ok(json_str.to_string());
+            }
         }
+        println!("message_str: {:?}", message_str);
+
+        Ok(message_str.to_string())
     }
 
-    fn send_apdu(
-        &self,
-        command: CommandType,
-        p1: u8,
-        p2: u8,
-        data: &[u8],
-    ) -> Result<String, RemoteWalletError> {
-        self._send_apdu(command, p1, p2, data, data.len())
+    fn send_apdu(&self, command: CommandType, data: &[u8]) -> Result<String, RemoteWalletError> {
+        self._send_apdu(command, data)
     }
 
     fn get_firmware_version(&self) -> Result<FirmwareVersion, RemoteWalletError> {
-        self.get_device_info().map(|config| FirmwareVersion::new(config.major, config.minor, config.patch))
+        self.get_device_info()
+            .map(|config| FirmwareVersion::new(config.major, config.minor, config.patch))
+    }
+
+    fn generate_ur(&self, derivation_path: &DerivationPath) -> Result<String, RemoteWalletError> {
+        let key_path = CryptoKeyPath::new(
+            vec![
+                PathComponent::new(Some(44), true).unwrap(),
+                PathComponent::new(Some(501), true).unwrap(),
+                PathComponent::new(Some(0), true).unwrap(),
+            ],
+            None,
+            None,
+        );
+        let schema = KeyDerivationSchema::new(key_path, Some(Curve::Ed25519), None, None);
+        let schemas = vec![schema];
+        let call = QRHardwareCall::new(
+            CallType::KeyDerivation,
+            CallParams::KeyDerivation(KeyDerivationCall::new(schemas)),
+            None,
+            HardWareCallVersion::V0,
+        );
+        let bytes: Vec<u8> = call.try_into().unwrap();
+        let res =
+            probe_encode(&bytes, 400, QRHardwareCall::get_registry_type().get_type()).unwrap();
+        Ok(res.data)
+    }
+
+    fn parse_ur_pubkey(&self, ur: &str) -> Result<Vec<u8>, RemoteWalletError> {
+        let result: URParseResult<CryptoMultiAccounts> =
+            probe_decode(ur.to_string().to_lowercase()).unwrap();
+
+        Ok(result.data.unwrap().get_keys().get(0).unwrap().get_key())
     }
 
     // pub fn get_settings(&self) -> Result<LedgerSettings, RemoteWalletError> {
-    //     self.get_device_info().map(|config| match config {
+    //     self.get_device_info().map(|conf ig| match config {
     //         ConfigurationVersion::Current(config) => {
     //             let enable_blind_signing = config[0] != 0;
     //             let pubkey_display = if config[1] == 0 {
@@ -376,12 +396,32 @@ impl KeystoneWallet {
     // }
 
     fn get_device_info(&self) -> Result<FirmwareVersion, RemoteWalletError> {
-        let data = self._send_apdu(CommandType::CMD_GET_DEVICE_INFO, 0, 0, &[], 0)?;
-        // data to json
-        let json = serde_json::to_string(&data).unwrap();
-        println!("json: {:?}......", json);
-        let data = serde_json::from_str::<Vec<u8>>(&data).unwrap();
-        Ok(FirmwareVersion::new(data[2].into(), data[3].into(), data[4].into()))
+        let json_str = self._send_apdu(CommandType::CMD_GET_DEVICE_INFO, &[])?;
+        match serde_json::from_str::<serde_json::Value>(&json_str) {
+            Ok(json) => {
+                if let Some(firmware_version) = json.get("firmwareVersion").and_then(|v| v.as_str())
+                {
+                    // Parse version string like "12.1.2"
+                    let parts: Vec<&str> = firmware_version.split('.').collect();
+                    if parts.len() >= 3 {
+                        if let (Ok(major), Ok(minor), Ok(patch)) = (
+                            parts[0].parse::<u64>(),
+                            parts[1].parse::<u64>(),
+                            parts[2].parse::<u64>(),
+                        ) {
+                            return Ok(FirmwareVersion::new(major, minor, patch));
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                println!("JSON parse error: {}", e);
+            }
+        }
+
+        // Fallback
+        println!("Using fallback version 0.0.0");
+        Ok(FirmwareVersion::new(0, 0, 0))
     }
 
     fn outdated_app(&self) -> bool {
@@ -408,16 +448,10 @@ impl WalletProbe<Self> for KeystoneProbe {}
 #[cfg(feature = "hidapi")]
 impl WalletProbe for KeystoneProbe {
     fn is_supported_device(&self, device_info: &hidapi::DeviceInfo) -> bool {
-        let data =
-            device_info.product_id() == KEYSTONE_PID && device_info.vendor_id() == KEYSTONE_VID;
-        if data {
-            println!("data: {:?}", data);
-        }
-        data
+        device_info.product_id() == KEYSTONE_PID && device_info.vendor_id() == KEYSTONE_VID
     }
 
     fn open(&self, usb: &mut HidApi, devinfo: DeviceInfo) -> Result<Device, RemoteWalletError> {
-        println!("devinfo.path(): {:?}", devinfo.path());
         let handle = usb
             .open_path(devinfo.path())
             .map_err(|e| RemoteWalletError::Hid(e.to_string()))?;
@@ -426,7 +460,6 @@ impl WalletProbe for KeystoneProbe {
             .read_device(&devinfo)
             .map_err(|e| RemoteWalletError::Hid(e.to_string()))?;
         wallet.pretty_path = info.get_pretty_path();
-        println!("wallet.pretty_path: {:?}", wallet.pretty_path);
         Ok(Device {
             path: devinfo.path().to_string_lossy().into_owned(),
             info,
@@ -456,18 +489,13 @@ impl RemoteWallet<hidapi::DeviceInfo> for KeystoneWallet {
             .unwrap_or("Unknown")
             .to_lowercase()
             .replace(' ', "-");
-        println!("{}:{:?}", file!(), line!());
         let serial = dev_info.serial_number().unwrap_or("Unknown").to_string();
-        println!("{}:{:?}", file!(), line!());
         let host_device_path = dev_info.path().to_string_lossy().to_string();
-        println!("{}:{:?}", file!(), line!());
-        let version = self.get_firmware_version()?;
-        println!("version: {:?}", version);
-        println!("{}:{:?}", file!(), line!());
+        // let version = self.get_firmware_version()?;
+        let version = FirmwareVersion::new(0, 0, 0);
+        debug_print!("version: {:?}", version);
         self.version = version;
-        println!("{}:{:?}", file!(), line!());
         let pubkey_result = self.get_pubkey(&DerivationPath::default(), false);
-        println!("{}:{:?}", file!(), line!());
         let (pubkey, error) = match pubkey_result {
             Ok(pubkey) => (pubkey, None),
             Err(err) => (Pubkey::default(), Some(err)),
@@ -487,20 +515,18 @@ impl RemoteWallet<hidapi::DeviceInfo> for KeystoneWallet {
         derivation_path: &DerivationPath,
         confirm_key: bool,
     ) -> Result<Pubkey, RemoteWalletError> {
-        let derivation_path = extend_and_serialize(derivation_path);
-
+        let derivation_path1 = extend_and_serialize(derivation_path);
+        debug_print!("derivation_path: {:?}", derivation_path1);
         let key = self.send_apdu(
             CommandType::CMD_RESOLVE_UR,
-            if confirm_key {
-                P1_CONFIRM
-            } else {
-                P1_NON_CONFIRM
-            },
-            0,
-            &derivation_path,
+            self.generate_ur(derivation_path)?.as_bytes(),
         )?;
-        let key = key.as_bytes();
-        Pubkey::try_from(key).map_err(|_| RemoteWalletError::Protocol("Key packet size mismatch"))
+        // json to find payload
+        let json = serde_json::from_str::<serde_json::Value>(&key).unwrap();
+        let payload = json.get("payload").unwrap().as_str().unwrap();
+        let pubkey = self.parse_ur_pubkey(payload)?;
+        Pubkey::try_from(pubkey)
+            .map_err(|_| RemoteWalletError::Protocol("Key packet size mismatch"))
     }
 
     fn sign_message(
@@ -551,8 +577,7 @@ impl RemoteWallet<hidapi::DeviceInfo> for KeystoneWallet {
             P2_MORE
         };
 
-        let p1 = P1_CONFIRM;
-        let mut result = self.send_apdu(CommandType::CMD_RESOLVE_UR, p1, p2, &payload)?;
+        let mut result = self.send_apdu(CommandType::CMD_RESOLVE_UR, &payload)?;
 
         // Pack and send the remaining chunks
         if !remaining_data.is_empty() {
@@ -574,12 +599,7 @@ impl RemoteWallet<hidapi::DeviceInfo> for KeystoneWallet {
             chunks.last_mut().unwrap().0 &= !P2_MORE;
 
             for (p2, payload) in chunks {
-                result = self.send_apdu(
-                    CommandType::CMD_RESOLVE_UR,
-                    p1,
-                    p2,
-                    &payload,
-                )?;
+                result = self.send_apdu(CommandType::CMD_RESOLVE_UR, &payload)?;
             }
         }
 
@@ -654,7 +674,6 @@ pub fn get_keystone_from_info(
     wallet_manager: &RemoteWalletManager,
 ) -> Result<Rc<KeystoneWallet>, RemoteWalletError> {
     let devices = wallet_manager.list_devices();
-    println!("devices: {:?}", devices);
     let mut matches = devices
         .iter()
         .filter(|&device_info| device_info.matches(&info));
@@ -668,13 +687,15 @@ pub fn get_keystone_from_info(
         }
     }
     let mut matches: Vec<(String, String)> = matches
-        .filter(|&device_info| device_info.error.is_none())
+        .filter(|&device_info| {
+            debug_print!("{:?}", device_info);
+            device_info.error.is_none()
+        })
         .map(|device_info| {
             let query_item = format!("{} ({})", device_info.get_pretty_path(), device_info.model,);
             (device_info.host_device_path.clone(), query_item)
         })
         .collect();
-    println!("matches: {:?}", matches);
     if matches.is_empty() {
         return Err(RemoteWalletError::NoDeviceFound);
     }

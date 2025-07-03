@@ -559,6 +559,7 @@ pub fn signer_from_source(
     wallet_manager: &mut Option<Rc<RemoteWalletManager>>,
 ) -> Result<Box<dyn Signer>, Box<dyn error::Error>> {
     let config = SignerFromPathConfig::default();
+    println!("{}:{:?}", file!(), line!());
     signer_from_source_with_config(matches, source, keypair_name, wallet_manager, &config)
 }
 
@@ -626,7 +627,10 @@ pub fn signer_from_path_with_config(
     wallet_manager: &mut Option<Rc<RemoteWalletManager>>,
     config: &SignerFromPathConfig,
 ) -> Result<Box<dyn Signer>, Box<dyn error::Error>> {
+    println!("path: {:?}", path);
     let source = SignerSource::parse(path)?;
+    println!("{}:{:?}", file!(), line!());
+    println!("source: {:?}", source);
     signer_from_source_with_config(matches, &source, keypair_name, wallet_manager, config)
 }
 
@@ -668,17 +672,12 @@ pub fn signer_from_source_with_config(
         }
         SignerSourceKind::Usb(locator) => {
             println!("{}:{:?}", file!(), line!());
+            println!("locator: {:?}", locator);
             if wallet_manager.is_none() {
                 *wallet_manager = maybe_wallet_manager()?;
             }
             if let Some(wallet_manager) = wallet_manager {
                 let confirm_key = matches.try_contains_id("confirm_key").unwrap_or(false);
-                println!("{}:{:?}", file!(), line!());
-                println!("locator: {:?}", locator);
-                println!("derivation_path: {:?}", derivation_path);
-                println!("confirm_key: {:?}", confirm_key);
-                println!("keypair_name: {:?}", keypair_name);
-
                 let data = generate_remote_keypair(
                     locator.clone(),
                     derivation_path.clone().unwrap_or_default(),
@@ -755,6 +754,8 @@ pub fn pubkey_from_path(
     wallet_manager: &mut Option<Rc<RemoteWalletManager>>,
 ) -> Result<Pubkey, Box<dyn error::Error>> {
     let source = SignerSource::parse(path)?;
+    println!("{}:{:?}", file!(), line!());
+    println!("source: {:?}", source);
     pubkey_from_source(matches, &source, keypair_name, wallet_manager)
 }
 
@@ -764,6 +765,7 @@ pub fn pubkey_from_source(
     keypair_name: &str,
     wallet_manager: &mut Option<Rc<RemoteWalletManager>>,
 ) -> Result<Pubkey, Box<dyn error::Error>> {
+    println!("{}:{:?}", file!(), line!());
     match source.kind {
         SignerSourceKind::Pubkey(pubkey) => Ok(pubkey),
         _ => Ok(signer_from_source(matches, source, keypair_name, wallet_manager)?.pubkey()),
@@ -776,6 +778,7 @@ pub fn resolve_signer_from_path(
     keypair_name: &str,
     wallet_manager: &mut Option<Rc<RemoteWalletManager>>,
 ) -> Result<Option<String>, Box<dyn error::Error>> {
+    println!("{}:{:?}", file!(), line!());
     let source = SignerSource::parse(path)?;
     resolve_signer_from_source(matches, &source, keypair_name, wallet_manager)
 }
@@ -823,6 +826,8 @@ pub fn resolve_signer_from_source(
             read_keypair(&mut stdin).map(|_| None)
         }
         SignerSourceKind::Usb(locator) => {
+            println!("{}:{:?}", file!(), line!());
+            println!("locator: {:?}", locator);
             if wallet_manager.is_none() {
                 *wallet_manager = maybe_wallet_manager()?;
             }
