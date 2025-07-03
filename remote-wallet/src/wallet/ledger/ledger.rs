@@ -3,7 +3,10 @@ use {
     crate::{
         errors::RemoteWalletError,
         remote_wallet::{RemoteWallet, RemoteWalletInfo, RemoteWalletManager},
-        wallet::{types::{Device, RemoteWalletType}, WalletProbe},
+        wallet::{
+            types::{Device, RemoteWalletType},
+            WalletProbe,
+        },
     },
     console::Emoji,
     dialoguer::{theme::ColorfulTheme, Select},

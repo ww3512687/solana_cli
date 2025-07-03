@@ -1,7 +1,7 @@
-use std::rc::Rc;
-use crate::wallet::ledger::ledger::LedgerWallet;
-use crate::wallet::keystone::keystone::KeystoneWallet;
 use crate::remote_wallet::RemoteWalletInfo;
+use crate::wallet::keystone::keystone::KeystoneWallet;
+use crate::wallet::ledger::ledger::LedgerWallet;
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct Device {

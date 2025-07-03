@@ -2,7 +2,12 @@ use {
     crate::errors::RemoteWalletError,
     crate::{
         locator::{Locator, LocatorError, Manufacturer},
-        wallet::{keystone::keystone::KeystoneWallet, ledger::ledger::LedgerWallet, types::{Device, RemoteWalletType}, WalletProbe},
+        wallet::{
+            keystone::keystone::KeystoneWallet,
+            ledger::ledger::LedgerWallet,
+            types::{Device, RemoteWalletType},
+            WalletProbe,
+        },
     },
     log::*,
     parking_lot::RwLock,
@@ -66,6 +71,8 @@ impl RemoteWalletManager {
                     .map(|p| p.open(&mut usb, devinfo))
             })
             .partition(Result::is_ok);
+        println!("oks: {:?}", oks);
+        println!("errs: {:?}", errs);
 
         *self.devices.write() = oks.into_iter().map(Result::unwrap).collect::<Vec<_>>();
 

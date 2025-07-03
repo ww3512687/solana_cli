@@ -6729,6 +6729,7 @@ dependencies = [
  "parking_lot 0.12.1",
  "qstring",
  "semver 1.0.22",
+ "serde_json",
  "solana-sdk",
  "thiserror",
  "uriparse",

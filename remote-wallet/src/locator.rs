@@ -12,6 +12,7 @@ use {
 pub enum Manufacturer {
     Unknown,
     Ledger,
+    Keystone,
 }
 
 impl Default for Manufacturer {
@@ -22,6 +23,7 @@ impl Default for Manufacturer {
 
 const MANUFACTURER_UNKNOWN: &str = "unknown";
 const MANUFACTURER_LEDGER: &str = "ledger";
+const MANUFACTURER_KEYSTONE: &str = "keystone";
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 #[error("not a manufacturer")]
@@ -56,6 +58,7 @@ impl AsRef<str> for Manufacturer {
         match self {
             Self::Unknown => MANUFACTURER_UNKNOWN,
             Self::Ledger => MANUFACTURER_LEDGER,
+            Self::Keystone => MANUFACTURER_KEYSTONE,
         }
     }
 }

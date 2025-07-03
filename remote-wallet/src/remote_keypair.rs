@@ -3,7 +3,10 @@ use {
         errors::RemoteWalletError,
         locator::{Locator, Manufacturer},
         remote_wallet::{RemoteWallet, RemoteWalletInfo, RemoteWalletManager},
-        wallet::{ledger::ledger::get_ledger_from_info, types::RemoteWalletType},
+        wallet::{
+            keystone::keystone::get_keystone_from_info, ledger::ledger::get_ledger_from_info,
+            types::RemoteWalletType,
+        },
     },
     solana_sdk::{
         derivation_path::DerivationPath,
@@ -77,6 +80,15 @@ pub fn generate_remote_keypair(
         let path = format!("{}{}", ledger.pretty_path, derivation_path.get_query());
         Ok(RemoteKeypair::new(
             RemoteWalletType::Ledger(ledger),
+            derivation_path,
+            confirm_key,
+            path,
+        )?)
+    } else if remote_wallet_info.manufacturer == Manufacturer::Keystone {
+        let keystone = get_keystone_from_info(remote_wallet_info, keypair_name, wallet_manager)?;
+        let path = format!("{}{}", keystone.pretty_path, derivation_path.get_query());
+        Ok(RemoteKeypair::new(
+            RemoteWalletType::Keystone(keystone),
             derivation_path,
             confirm_key,
             path,
