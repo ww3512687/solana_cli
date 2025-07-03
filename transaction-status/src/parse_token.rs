@@ -30,6 +30,7 @@ pub fn parse_token(
     instruction: &CompiledInstruction,
     account_keys: &AccountKeys,
 ) -> Result<ParsedInstructionEnum, ParseInstructionError> {
+    println!("{}:{:?}", file!(), line!());
     let token_instruction = TokenInstruction::unpack(&instruction.data)
         .map_err(|_| ParseInstructionError::InstructionNotParsable(ParsableProgram::SplToken))?;
     match instruction.accounts.iter().max() {

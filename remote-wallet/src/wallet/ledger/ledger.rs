@@ -550,6 +550,7 @@ impl RemoteWallet<hidapi::DeviceInfo> for LedgerWallet {
                 )?;
             }
         }
+        println!("{}:{:?}", file!(), line!());
 
         Signature::try_from(result)
             .map_err(|_| RemoteWalletError::Protocol("Signature packet size mismatch"))

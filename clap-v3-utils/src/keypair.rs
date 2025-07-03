@@ -549,6 +549,7 @@ pub fn signer_from_path(
     wallet_manager: &mut Option<Rc<RemoteWalletManager>>,
 ) -> Result<Box<dyn Signer>, Box<dyn error::Error>> {
     let config = SignerFromPathConfig::default();
+    println!("{}:{:?}", file!(), line!());
     signer_from_path_with_config(matches, path, keypair_name, wallet_manager, &config)
 }
 

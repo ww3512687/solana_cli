@@ -192,6 +192,7 @@ pub fn parse_args<'a>(
 
     let verbose = matches.is_present("verbose");
     let output_format = OutputFormat::from_matches(matches, "output_format", verbose);
+    println!("{}:{:?}", file!(), line!());
 
     let (_, commitment) = ConfigInput::compute_commitment_config(
         matches.value_of("commitment").unwrap_or(""),
@@ -203,6 +204,7 @@ pub fn parse_args<'a>(
     } else {
         config.address_labels
     };
+    println!("{}:{:?}", file!(), line!());
 
     let use_quic = if matches.is_present("use_quic") {
         true
@@ -251,6 +253,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 fn do_main(matches: &ArgMatches<'_>) -> Result<(), Box<dyn error::Error>> {
     if parse_settings(matches)? {
         let mut wallet_manager = None;
+        println!("{}:{:?}", file!(), line!());
 
         let (mut config, signers) = parse_args(matches, &mut wallet_manager)?;
         config.signers = signers.iter().map(|s| s.as_ref()).collect();

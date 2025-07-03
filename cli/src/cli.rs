@@ -473,7 +473,7 @@ pub enum CliError {
     InsufficientFundsForFee(f64, Pubkey),
     #[error("Account {1} has insufficient funds for spend ({0} SOL)")]
     InsufficientFundsForSpend(f64, Pubkey),
-    #[error("Account {2} has insufficient funds for spend ({0} SOL) + fee ({1} SOL)")]
+    #[error("Account {2} has insufficient funds for spend ({0} SOL) + fe11e ({1} SOL)")]
     InsufficientFundsForSpendAndFee(f64, f64, Pubkey),
     #[error(transparent)]
     InvalidNonce(solana_rpc_client_nonce_utils::Error),
@@ -576,6 +576,7 @@ pub fn parse_command(
     default_signer: &DefaultSigner,
     wallet_manager: &mut Option<Rc<RemoteWalletManager>>,
 ) -> Result<CliCommandInfo, Box<dyn error::Error>> {
+    println!("{}:{:?}", file!(), line!());
     let response = match matches.subcommand() {
         // Autocompletion Command
         ("completion", Some(matches)) => {
@@ -826,7 +827,9 @@ pub fn parse_command(
                 signers: vec![],
             })
         }
-        ("transfer", Some(matches)) => parse_transfer(matches, default_signer, wallet_manager),
+        ("transfer", Some(matches)) => {
+            parse_transfer(matches, default_signer, wallet_manager)
+        }
         ("sign-offchain-message", Some(matches)) => {
             parse_sign_offchain_message(matches, default_signer, wallet_manager)
         }

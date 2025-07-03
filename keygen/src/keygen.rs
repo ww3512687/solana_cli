@@ -443,11 +443,13 @@ fn do_main(matches: &ArgMatches) -> Result<(), Box<dyn error::Error>> {
     };
 
     let mut wallet_manager = None;
+    println!("{}:{:?}", file!(), line!());
 
     let subcommand = matches.subcommand().unwrap();
 
     match subcommand {
         ("pubkey", matches) => {
+            println!("{}:{:?}", file!(), line!());
             let pubkey =
                 get_keypair_from_matches(matches, config, &mut wallet_manager)?.try_pubkey()?;
 

@@ -56,6 +56,7 @@ pub trait WalletSubCommands {
 
 impl WalletSubCommands for App<'_, '_> {
     fn wallet_subcommands(self) -> Self {
+        println!("{}:{:?}", file!(), line!());
         self.subcommand(
             SubCommand::with_name("account")
                 .about("Show the contents of an account")
@@ -566,6 +567,9 @@ pub fn parse_transfer(
     let (fee_payer, fee_payer_pubkey) = signer_of(matches, FEE_PAYER_ARG.name, wallet_manager)?;
     let (from, from_pubkey) = signer_of(matches, "from", wallet_manager)?;
     let allow_unfunded_recipient = matches.is_present("allow_unfunded_recipient");
+    println!("{}:{:?}", file!(), line!());
+    println!("amount: {:?}", amount);
+    println!("from: {:?}", from);
 
     let mut bulk_signers = vec![fee_payer, from];
     if nonce_account.is_some() {
@@ -574,13 +578,39 @@ pub fn parse_transfer(
 
     let signer_info =
         default_signer.generate_unique_signers(bulk_signers, matches, wallet_manager)?;
+    println!("{}:{:?}", file!(), line!());
     let compute_unit_price = value_of(matches, COMPUTE_UNIT_PRICE_ARG.name);
 
     let derived_address_seed = matches
         .value_of("derived_address_seed")
         .map(|s| s.to_string());
+    println!("{}:{:?}", file!(), line!());
     let derived_address_program_id =
         resolve_derived_address_program_id(matches, "derived_address_program_id");
+
+    let cli_command_info = CliCommandInfo {
+        command: CliCommand::Transfer {
+            amount,
+            to,
+            sign_only,
+            dump_transaction_message,
+            allow_unfunded_recipient,
+            no_wait,
+            blockhash_query,
+            nonce_account,
+            nonce_authority: signer_info.index_of(nonce_authority_pubkey).unwrap(),
+            memo,
+            fee_payer: signer_info.index_of(fee_payer_pubkey).unwrap(),
+            from: signer_info.index_of(from_pubkey).unwrap(),
+            derived_address_seed,
+            derived_address_program_id,
+            compute_unit_price,
+        },
+        signers: signer_info.signers,
+    };
+    println!("{}:{:?}", file!(), line!());
+    println!("cli_command_info: {:?}", cli_command_info);
+    return Ok(cli_command_info);
 
     Ok(CliCommandInfo {
         command: CliCommand::Transfer {

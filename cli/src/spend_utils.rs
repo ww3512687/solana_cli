@@ -124,7 +124,9 @@ where
                 ));
             }
         } else {
+            println!("{}:{:?}", file!(), line!());
             if from_balance < spend {
+                println!("{}:{:?}", file!(), line!());
                 return Err(CliError::InsufficientFundsForSpend(
                     lamports_to_sol(spend),
                     *from_pubkey,

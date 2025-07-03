@@ -14,6 +14,7 @@ pub fn parse_system(
     instruction: &CompiledInstruction,
     account_keys: &AccountKeys,
 ) -> Result<ParsedInstructionEnum, ParseInstructionError> {
+    println!("{}:{:?}", file!(), line!());
     let system_instruction: SystemInstruction = deserialize(&instruction.data)
         .map_err(|_| ParseInstructionError::InstructionNotParsable(ParsableProgram::System))?;
     match instruction.accounts.iter().max() {
