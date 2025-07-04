@@ -30,6 +30,7 @@ impl RemoteKeypair {
         confirm_key: bool,
         path: String,
     ) -> Result<Self, RemoteWalletError> {
+        debug_print!("derivation_path new: {:?}", derivation_path);
         let pubkey = match &wallet_type {
             RemoteWalletType::Ledger(wallet) => wallet.get_pubkey(&derivation_path, confirm_key)?,
             RemoteWalletType::Keystone(wallet) => {
@@ -75,7 +76,9 @@ pub fn generate_remote_keypair(
     keypair_name: &str,
 ) -> Result<RemoteKeypair, RemoteWalletError> {
     let remote_wallet_info = RemoteWalletInfo::parse_locator(locator);
+    debug_print!("remote_wallet_info: {:?}", remote_wallet_info);
     if remote_wallet_info.manufacturer == Manufacturer::Ledger {
+        debug_print!("get_ledger_from_info");
         let ledger = get_ledger_from_info(remote_wallet_info, keypair_name, wallet_manager)?;
         let path = format!("{}{}", ledger.pretty_path, derivation_path.get_query());
         Ok(RemoteKeypair::new(

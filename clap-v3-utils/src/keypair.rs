@@ -672,8 +672,9 @@ pub fn signer_from_source_with_config(
             Ok(Box::new(read_keypair(&mut stdin)?))
         }
         SignerSourceKind::Usb(locator) => {
-            println!("{}:{:?}", file!(), line!());
             println!("locator: {:?}", locator);
+            println!("derivation_path: {:?}", derivation_path);
+            println!("{}:{:?}", file!(), line!());
             if wallet_manager.is_none() {
                 *wallet_manager = maybe_wallet_manager()?;
             }

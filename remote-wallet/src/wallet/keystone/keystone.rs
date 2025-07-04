@@ -166,7 +166,6 @@ impl KeystoneWallet {
         let mut offset = 0;
         let mut sequence_number = 0;
         let mut hid_chunk = [0_u8; HID_PACKET_SIZE];
-        debug_print!("data_len: {:?}", data_len);
         let total_packets = if data_len > 11 {
             if data_len % (64 - 10) == 0 {
                 data_len / (64 - 10)
@@ -425,7 +424,6 @@ impl KeystoneWallet {
         let mut mfp = None;
         match serde_json::from_str::<serde_json::Value>(&json_str) {
             Ok(json) => {
-                debug_print!("json: {:?}", json);
                 if let Some(firmware_version) = json.get("firmwareVersion").and_then(|v| v.as_str())
                 {
                     // Parse version string like "12.1.2"
@@ -442,10 +440,7 @@ impl KeystoneWallet {
                 }
 
                 if let Some(mfp_str) = json.get("walletMFP").and_then(|v| v.as_str()) {
-                    debug_print!("mfp_str: {:?}\n\n\n", mfp_str);
                     let mfp_bytes = hex::decode(mfp_str).unwrap();
-                    debug_print!("mfp_bytes: {:?}", mfp_bytes);
-                    debug_print!("mfp_bytes.len(): {:?}", mfp_bytes.len());
                     if mfp_bytes.len() == 4 {
                         mfp = Some([mfp_bytes[0], mfp_bytes[1], mfp_bytes[2], mfp_bytes[3]]);
                     }
@@ -526,7 +521,7 @@ impl RemoteWallet<hidapi::DeviceInfo> for KeystoneWallet {
             .replace(' ', "-");
         let serial = dev_info.serial_number().unwrap_or("Unknown").to_string();
         let host_device_path = dev_info.path().to_string_lossy().to_string();
-        let (version, mfp) = self.get_device_info()?;
+        let (version, mfp) = self.get_device_info()?; 
         debug_print!("version: {:?}", version);
         self.version = version;
         self.mfp = mfp;
@@ -551,14 +546,32 @@ impl RemoteWallet<hidapi::DeviceInfo> for KeystoneWallet {
         derivation_path: &DerivationPath,
         confirm_key: bool,
     ) -> Result<Pubkey, RemoteWalletError> {
-        let key = self.send_apdu(
-            CommandType::CMD_RESOLVE_UR,
-            self.generate_hardware_call(derivation_path)?.as_bytes(),
-        )?;
+        debug_print!("derivation_path: {:?}", derivation_path);
+        let pubkey = if is_path_in_cached_range(derivation_path) {
+            let data = extend_and_serialize(derivation_path);
+            debug_print!("data: {:?}", data);
+            let key =self.send_apdu(
+                CommandType::CMD_GET_DEVICE_USB_PUBKEY,
+                data.as_slice(),
+            )?;
+            let json = serde_json::from_str::<serde_json::Value>(&key).unwrap();
+            debug_print!("json: {:?}", json);
+            let payload = json.get("pubkey").unwrap().as_str().unwrap();
+            debug_print!("payload: {:?}", payload);
+            let pubkey = payload.as_bytes().to_vec();
+            pubkey
+        } else {
+            let key = self.send_apdu(
+                CommandType::CMD_RESOLVE_UR,
+                self.generate_hardware_call(derivation_path)?.as_bytes(),
+            )?;
+            let json = serde_json::from_str::<serde_json::Value>(&key).unwrap();
+            let payload = json.get("payload").unwrap().as_str().unwrap();
+            let pubkey = self.parse_ur_pubkey(payload)?;
+            pubkey
+        };
+
         // json to find payload
-        let json = serde_json::from_str::<serde_json::Value>(&key).unwrap();
-        let payload = json.get("payload").unwrap().as_str().unwrap();
-        let pubkey = self.parse_ur_pubkey(payload)?;
         Pubkey::try_from(pubkey)
             .map_err(|_| RemoteWalletError::Protocol("Key packet size mismatch"))
     }
@@ -595,6 +608,7 @@ impl RemoteWallet<hidapi::DeviceInfo> for KeystoneWallet {
         let signature = self.parse_ur_signature(payload)?;
 
         debug_print!("signature: {:?}", signature);
+        let signature = vec![0u8; 64];
         Signature::try_from(signature)
             .map_err(|_| RemoteWalletError::Protocol("Signature packet size mismatch"))
     }
@@ -656,7 +670,6 @@ fn extend_and_serialize(derivation_path: &DerivationPath) -> Vec<u8> {
     };
     let mut concat_derivation = vec![byte];
     for index in derivation_path.path() {
-        debug_print!("index: {:?}", index);
         concat_derivation.extend_from_slice(&index.to_bits().to_be_bytes());
     }
     concat_derivation
