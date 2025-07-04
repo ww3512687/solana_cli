@@ -19,6 +19,8 @@ use {
     ur_registry::extend::crypto_multi_accounts::CryptoMultiAccounts,
     ur_registry::extend::key_derivation::KeyDerivationCall,
     ur_registry::extend::key_derivation_schema::{Curve, KeyDerivationSchema},
+    ur_registry::solana::sol_sign_request::{SolSignRequest, SignType},
+    ur_registry::solana::sol_signature::SolSignature,
     ur_registry::extend::qr_hardware_call::{
         CallParams, CallType, HardWareCallVersion, QRHardwareCall,
     },
@@ -114,6 +116,7 @@ pub struct KeystoneWallet {
     pub device: hidapi::HidDevice,
     pub pretty_path: String,
     pub version: FirmwareVersion,
+    pub mfp: Option<[u8; 4]>,
 }
 
 impl fmt::Debug for KeystoneWallet {
@@ -139,6 +142,7 @@ impl KeystoneWallet {
             device,
             pretty_path: String::default(),
             version: FirmwareVersion::new(0, 0, 0),
+            mfp: None,
         }
     }
 
@@ -162,8 +166,13 @@ impl KeystoneWallet {
         let mut offset = 0;
         let mut sequence_number = 0;
         let mut hid_chunk = [0_u8; HID_PACKET_SIZE];
+        debug_print!("data_len: {:?}", data_len);
         let total_packets = if data_len > 11 {
-            (data_len - 11) / 64 + 1
+            if data_len % (64 - 10) == 0 {
+                data_len / (64 - 10)
+            } else {
+                data_len / (64 - 10) + 1
+            }
         } else {
             1
         };
@@ -193,6 +202,7 @@ impl KeystoneWallet {
             }
             trace!("Ledger write {:?}", &hid_chunk[..]);
             if command == CommandType::CMD_RESOLVE_UR {
+                // debug_print!("send command: sequence_number: {:?}, request_id: {:?}", sequence_number, request_id);
                 // debug_print!("send hid_chunk (hex): {:02x?}", &hid_chunk[..]);
                 // debug_print!("send string: {:?}", String::from_utf8_lossy(&hid_chunk[..]));
             }
@@ -338,32 +348,40 @@ impl KeystoneWallet {
         self._send_apdu(command, data)
     }
 
-    fn get_firmware_version(&self) -> Result<FirmwareVersion, RemoteWalletError> {
+    fn get_firmware_version(&self) -> Result<(FirmwareVersion, Option<[u8; 4]>), RemoteWalletError> {
         self.get_device_info()
-            .map(|config| FirmwareVersion::new(config.major, config.minor, config.patch))
     }
 
-    fn generate_ur(&self, derivation_path: &DerivationPath) -> Result<String, RemoteWalletError> {
-        let key_path = CryptoKeyPath::new(
-            vec![
-                PathComponent::new(Some(44), true).unwrap(),
-                PathComponent::new(Some(501), true).unwrap(),
-                PathComponent::new(Some(0), true).unwrap(),
-            ],
-            None,
-            None,
-        );
+    fn generate_hardware_call(&self, derivation_path: &DerivationPath) -> Result<String, RemoteWalletError> {
+        let key_path = parse_crypto_key_path(derivation_path, self.mfp);
         let schema = KeyDerivationSchema::new(key_path, Some(Curve::Ed25519), None, None);
         let schemas = vec![schema];
         let call = QRHardwareCall::new(
             CallType::KeyDerivation,
             CallParams::KeyDerivation(KeyDerivationCall::new(schemas)),
             None,
-            HardWareCallVersion::V0,
+            HardWareCallVersion::V1,
         );
         let bytes: Vec<u8> = call.try_into().unwrap();
         let res =
             probe_encode(&bytes, 400, QRHardwareCall::get_registry_type().get_type()).unwrap();
+        Ok(res.data)
+    }
+
+    fn generate_sol_sign_request(&self, derivation_path: &DerivationPath, sign_data: &[u8]) -> Result<String, RemoteWalletError> {
+        let crypto_key_path = parse_crypto_key_path(derivation_path, self.mfp);
+        let request_id = [0u8; 16].to_vec();
+        let sol_sign_request = SolSignRequest::new(
+            Some(request_id),
+            sign_data.to_vec(),
+            crypto_key_path,
+            None,
+            Some("solana cli".to_string()),
+            SignType::Transaction,
+        );
+        let bytes: Vec<u8> = sol_sign_request.try_into().unwrap();
+        let res =
+            probe_encode(&bytes, 400, SolSignRequest::get_registry_type().get_type()).unwrap();
         Ok(res.data)
     }
 
@@ -372,6 +390,12 @@ impl KeystoneWallet {
             probe_decode(ur.to_string().to_lowercase()).unwrap();
 
         Ok(result.data.unwrap().get_keys().get(0).unwrap().get_key())
+    }
+
+    fn parse_ur_signature(&self, ur: &str) -> Result<Vec<u8>, RemoteWalletError> {
+        let result: URParseResult<SolSignature> =
+            probe_decode(ur.to_string().to_lowercase()).unwrap();
+        Ok(result.data.unwrap().get_signature().to_vec())
     }
 
     // pub fn get_settings(&self) -> Result<LedgerSettings, RemoteWalletError> {
@@ -395,10 +419,13 @@ impl KeystoneWallet {
     //     })
     // }
 
-    fn get_device_info(&self) -> Result<FirmwareVersion, RemoteWalletError> {
+    fn get_device_info(&self) -> Result<(FirmwareVersion, Option<[u8; 4]>), RemoteWalletError> {
         let json_str = self._send_apdu(CommandType::CMD_GET_DEVICE_INFO, &[])?;
+        let mut version = FirmwareVersion::new(0, 0, 0);
+        let mut mfp = None;
         match serde_json::from_str::<serde_json::Value>(&json_str) {
             Ok(json) => {
+                debug_print!("json: {:?}", json);
                 if let Some(firmware_version) = json.get("firmwareVersion").and_then(|v| v.as_str())
                 {
                     // Parse version string like "12.1.2"
@@ -409,19 +436,27 @@ impl KeystoneWallet {
                             parts[1].parse::<u64>(),
                             parts[2].parse::<u64>(),
                         ) {
-                            return Ok(FirmwareVersion::new(major, minor, patch));
+                            version = FirmwareVersion::new(major, minor, patch);
                         }
+                    }
+                }
+
+                if let Some(mfp_str) = json.get("walletMFP").and_then(|v| v.as_str()) {
+                    debug_print!("mfp_str: {:?}\n\n\n", mfp_str);
+                    let mfp_bytes = hex::decode(mfp_str).unwrap();
+                    debug_print!("mfp_bytes: {:?}", mfp_bytes);
+                    debug_print!("mfp_bytes.len(): {:?}", mfp_bytes.len());
+                    if mfp_bytes.len() == 4 {
+                        mfp = Some([mfp_bytes[0], mfp_bytes[1], mfp_bytes[2], mfp_bytes[3]]);
                     }
                 }
             }
             Err(e) => {
                 println!("JSON parse error: {}", e);
+                return Err(RemoteWalletError::Protocol("JSON parse error"));
             }
         }
-
-        // Fallback
-        println!("Using fallback version 0.0.0");
-        Ok(FirmwareVersion::new(0, 0, 0))
+        Ok((version, mfp))
     }
 
     fn outdated_app(&self) -> bool {
@@ -491,10 +526,11 @@ impl RemoteWallet<hidapi::DeviceInfo> for KeystoneWallet {
             .replace(' ', "-");
         let serial = dev_info.serial_number().unwrap_or("Unknown").to_string();
         let host_device_path = dev_info.path().to_string_lossy().to_string();
-        // let version = self.get_firmware_version()?;
-        let version = FirmwareVersion::new(0, 0, 0);
+        let (version, mfp) = self.get_device_info()?;
         debug_print!("version: {:?}", version);
         self.version = version;
+        self.mfp = mfp;
+        debug_print!("mfp: {:?}", mfp);
         let pubkey_result = self.get_pubkey(&DerivationPath::default(), false);
         let (pubkey, error) = match pubkey_result {
             Ok(pubkey) => (pubkey, None),
@@ -515,11 +551,9 @@ impl RemoteWallet<hidapi::DeviceInfo> for KeystoneWallet {
         derivation_path: &DerivationPath,
         confirm_key: bool,
     ) -> Result<Pubkey, RemoteWalletError> {
-        let derivation_path1 = extend_and_serialize(derivation_path);
-        debug_print!("derivation_path: {:?}", derivation_path1);
         let key = self.send_apdu(
             CommandType::CMD_RESOLVE_UR,
-            self.generate_ur(derivation_path)?.as_bytes(),
+            self.generate_hardware_call(derivation_path)?.as_bytes(),
         )?;
         // json to find payload
         let json = serde_json::from_str::<serde_json::Value>(&key).unwrap();
@@ -541,72 +575,27 @@ impl RemoteWallet<hidapi::DeviceInfo> for KeystoneWallet {
         if !data.is_empty() && data[0] == 0xff {
             return self.sign_offchain_message(derivation_path, data);
         }
-        let mut payload = if self.outdated_app() {
-            extend_and_serialize(derivation_path)
-        } else {
-            extend_and_serialize_multiple(&[derivation_path])
-        };
-        if data.len() > u16::max_value() as usize {
-            return Err(RemoteWalletError::InvalidInput(
-                "Message to sign is too long".to_string(),
-            ));
+        
+        let key_path = parse_crypto_key_path(derivation_path, self.mfp);
+        debug_print!("key_path: {:?}", key_path);
+
+        if self.mfp.is_none() {
+            return Err(RemoteWalletError::Protocol("MFP is not set"));
         }
 
-        // Check to see if this data needs to be split up and
-        // sent in chunks.
-        let max_size = MAX_CHUNK_SIZE - payload.len();
-        let empty = vec![];
-        let (data, remaining_data) = if data.len() > max_size {
-            data.split_at(max_size)
-        } else {
-            (data, empty.as_ref())
-        };
+        let result = self.generate_sol_sign_request(derivation_path, data)?;
+        debug_print!("result: {:?}", result);
+        let key = self.send_apdu(
+            CommandType::CMD_RESOLVE_UR,
+            result.as_bytes(),
+        )?;
+        let json = serde_json::from_str::<serde_json::Value>(&key).unwrap();
+        let payload = json.get("payload").unwrap().as_str().unwrap();
+        debug_print!("payload: {:?}", payload);
+        let signature = self.parse_ur_signature(payload)?;
 
-        // Pack the first chunk
-        if self.outdated_app() {
-            for byte in (data.len() as u16).to_be_bytes().iter() {
-                payload.push(*byte);
-            }
-        }
-        payload.extend_from_slice(data);
-        trace!("Serialized payload length {:?}", payload.len());
-
-        let p2 = if remaining_data.is_empty() {
-            0
-        } else {
-            P2_MORE
-        };
-
-        let mut result = self.send_apdu(CommandType::CMD_RESOLVE_UR, &payload)?;
-
-        // Pack and send the remaining chunks
-        if !remaining_data.is_empty() {
-            let mut chunks: Vec<_> = remaining_data
-                .chunks(MAX_CHUNK_SIZE)
-                .map(|data| {
-                    let mut payload = if self.outdated_app() {
-                        (data.len() as u16).to_be_bytes().to_vec()
-                    } else {
-                        vec![]
-                    };
-                    payload.extend_from_slice(data);
-                    let p2 = P2_EXTEND | P2_MORE;
-                    (p2, payload)
-                })
-                .collect();
-
-            // Clear the P2_MORE bit on the last item.
-            chunks.last_mut().unwrap().0 &= !P2_MORE;
-
-            for (p2, payload) in chunks {
-                result = self.send_apdu(CommandType::CMD_RESOLVE_UR, &payload)?;
-            }
-        }
-
-        let result = result.as_bytes();
-        println!("result: {:?}", result);
-
-        Signature::try_from(result)
+        debug_print!("signature: {:?}", signature);
+        Signature::try_from(signature)
             .map_err(|_| RemoteWalletError::Protocol("Signature packet size mismatch"))
     }
 
@@ -643,9 +632,22 @@ impl RemoteWallet<hidapi::DeviceInfo> for KeystoneWallet {
     // }
 }
 
+fn parse_crypto_key_path(derivation_path: &DerivationPath, mfp: Option<[u8; 4]>) -> CryptoKeyPath {
+    let mut path_components = vec![PathComponent::new(Some(44), true).unwrap(), PathComponent::new(Some(501), true).unwrap()];
+    if derivation_path.account().is_some() {
+        let account_index = derivation_path.account().unwrap().to_u32();
+        path_components.push(PathComponent::new(Some(account_index), true).unwrap());
+    }
+    if derivation_path.change().is_some() {
+        let change_index = derivation_path.change().unwrap().to_u32();
+        path_components.push(PathComponent::new(Some(change_index), true).unwrap());
+    }
+    CryptoKeyPath::new(path_components, mfp, None)
+}
+
 /// Build the derivation path byte array from a DerivationPath selection
 fn extend_and_serialize(derivation_path: &DerivationPath) -> Vec<u8> {
-    let byte = if derivation_path.change().is_some() {
+    let byte: u8 = if derivation_path.change().is_some() {
         4
     } else if derivation_path.account().is_some() {
         3
@@ -654,6 +656,7 @@ fn extend_and_serialize(derivation_path: &DerivationPath) -> Vec<u8> {
     };
     let mut concat_derivation = vec![byte];
     for index in derivation_path.path() {
+        debug_print!("index: {:?}", index);
         concat_derivation.extend_from_slice(&index.to_bits().to_be_bytes());
     }
     concat_derivation
@@ -721,6 +724,33 @@ pub fn get_keystone_from_info(
 //
 fn is_last_part(p2: u8) -> bool {
     p2 & P2_MORE == 0
+}
+
+fn is_path_in_cached_range(derivation_path: &DerivationPath) -> bool {
+    let path = derivation_path.path();
+    
+    if path.len() < 2 {
+        return false;
+    }
+    
+    if path[0].to_u32() != 44 || path[1].to_u32() != 501 {
+        return false;
+    }
+    
+    match path.len() {
+        2 => true,
+        3 => {
+            let account = path[2].to_u32();
+            account <= 49
+        }
+        4 => {
+            let account = path[2].to_u32();
+            let change = path[3].to_u32();
+            account == 0 && change <= 49
+        }
+        
+        _ => false,
+    }
 }
 
 #[cfg(test)]

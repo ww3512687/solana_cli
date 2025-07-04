@@ -206,6 +206,7 @@ pub struct RemoteWalletInfo {
 
 impl RemoteWalletInfo {
     pub fn parse_locator(locator: Locator) -> Self {
+        debug_print!("locator: {:?}", locator);
         RemoteWalletInfo {
             manufacturer: locator.manufacturer,
             pubkey: locator.pubkey.unwrap_or_default(),
