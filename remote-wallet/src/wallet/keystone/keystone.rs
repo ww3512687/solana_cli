@@ -544,22 +544,18 @@ impl RemoteWallet<hidapi::DeviceInfo> for KeystoneWallet {
     fn get_pubkey(
         &self,
         derivation_path: &DerivationPath,
-        confirm_key: bool,
+        _confirm_key: bool,
     ) -> Result<Pubkey, RemoteWalletError> {
         debug_print!("derivation_path: {:?}", derivation_path);
         let pubkey = if is_path_in_cached_range(derivation_path) {
             let data = extend_and_serialize(derivation_path);
-            debug_print!("data: {:?}", data);
             let key =self.send_apdu(
                 CommandType::CMD_GET_DEVICE_USB_PUBKEY,
                 data.as_slice(),
             )?;
             let json = serde_json::from_str::<serde_json::Value>(&key).unwrap();
-            debug_print!("json: {:?}", json);
             let payload = json.get("pubkey").unwrap().as_str().unwrap();
-            debug_print!("payload: {:?}", payload);
-            let pubkey = payload.as_bytes().to_vec();
-            pubkey
+            hex::decode(payload).unwrap()
         } else {
             let key = self.send_apdu(
                 CommandType::CMD_RESOLVE_UR,
@@ -571,7 +567,6 @@ impl RemoteWallet<hidapi::DeviceInfo> for KeystoneWallet {
             pubkey
         };
 
-        // json to find payload
         Pubkey::try_from(pubkey)
             .map_err(|_| RemoteWalletError::Protocol("Key packet size mismatch"))
     }
