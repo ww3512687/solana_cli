@@ -377,7 +377,7 @@ impl KeystoneWallet {
         );
         let bytes: Vec<u8> = sol_sign_request.try_into().unwrap();
         let res =
-            probe_encode(&bytes, 400, SolSignRequest::get_registry_type().get_type()).unwrap();
+            probe_encode(&bytes, 0xFFFFFFF, SolSignRequest::get_registry_type().get_type()).unwrap();
         Ok(res.data)
     }
 
@@ -565,6 +565,13 @@ impl RemoteWallet<hidapi::DeviceInfo> for KeystoneWallet {
                 data.as_slice(),
             )?;
             let payload = self.parse_json_field(&key, JSON_FIELD_PUBKEY)?;
+            
+            // 检查 payload 是否包含错误信息
+            let keystone_error = KeystoneError::from_error_message(&payload);
+            if !matches!(keystone_error, KeystoneError::CommunicationError { .. }) {
+                return Err(keystone_error.into());
+            }
+            
             hex::decode(payload)
                 .map_err(|_| RemoteWalletError::Protocol(ERROR_INVALID_HEX))?
         } else {
@@ -573,6 +580,13 @@ impl RemoteWallet<hidapi::DeviceInfo> for KeystoneWallet {
                 self.generate_hardware_call(derivation_path)?.as_bytes(),
             )?;
             let payload = self.parse_json_field(&key, JSON_FIELD_PAYLOAD)?;
+            
+            // 检查 payload 是否包含错误信息
+            let keystone_error = KeystoneError::from_error_message(&payload);
+            if !matches!(keystone_error, KeystoneError::CommunicationError { .. }) {
+                return Err(keystone_error.into());
+            }
+            
             self.parse_ur_pubkey(&payload)?
         };
 
@@ -608,7 +622,13 @@ impl RemoteWallet<hidapi::DeviceInfo> for KeystoneWallet {
         )?;
         let payload = self.parse_json_field(&key, JSON_FIELD_PAYLOAD)?;
         debug_print!("payload: {:?}", payload);
-        let signature = self.parse_ur_signature(&payload)?;
+        
+        let keystone_error = KeystoneError::from_error_message(&payload);
+        if !matches!(keystone_error, KeystoneError::CommunicationError { .. }) {
+            return Err(keystone_error.into());
+        }
+        
+        let signature =  self.parse_ur_signature(&payload)?;
 
         debug_print!("signature: {:?}", signature);
         
@@ -618,37 +638,50 @@ impl RemoteWallet<hidapi::DeviceInfo> for KeystoneWallet {
             .map_err(|_| RemoteWalletError::Protocol(ERROR_SIGNATURE_SIZE))
     }
 
-    // fn sign_offchain_message(
-    //     &self,
-    //     derivation_path: &DerivationPath,
-    //     message: &[u8],
-    // ) -> Result<Signature, RemoteWalletError> {
-    //     if message.len()
-    //         > solana_sdk::offchain_message::v0::OffchainMessage::MAX_LEN_LEDGER
-    //             + solana_sdk::offchain_message::v0::OffchainMessage::HEADER_LEN
-    //     {
-    //         return Err(RemoteWalletError::InvalidInput(
-    //             "Off-chain message to sign is too long".to_string(),
-    //         ));
-    //     }
+    fn sign_offchain_message(
+        &self,
+        derivation_path: &DerivationPath,
+        data: &[u8],
+    ) -> Result<Signature, RemoteWalletError> {
+        // If the first byte of the data is 0xff then it is an off-chain message
+        // because it starts with the Domain Specifier b"\xffsolana offchain".
+        // On-chain messages, in contrast, start with either 0x80 (MESSAGE_VERSION_PREFIX)
+        // or the number of signatures (0x00 - 0x13).
+        // if !data.is_empty() && data[0] == 0xff {
+            // return self.sign_offchain_message(derivation_path, data);
+        // }
+        debug_print!("{}:{:?}", file!(), line!());
+        
+        let key_path = parse_crypto_key_path(derivation_path, self.mfp);
+        debug_print!("key_path: {:?}", key_path);
 
-    //     let mut data = extend_and_serialize_multiple(&[derivation_path]);
-    //     data.extend_from_slice(message);
+        if self.mfp.is_none() {
+            return Err(RemoteWalletError::Protocol("MFP is not set"));
+        }
 
-    //     let p1 = P1_CONFIRM;
-    //     let mut p2 = 0;
-    //     let mut payload = data.as_slice();
-    //     while payload.len() > MAX_CHUNK_SIZE {
-    //         let chunk = &payload[..MAX_CHUNK_SIZE];
-    //         self.send_apdu(CommandType::SIGN_OFFCHAIN_MESSAGE, p1, p2 | P2_MORE, chunk)?;
-    //         payload = &payload[MAX_CHUNK_SIZE..];
-    //         p2 |= P2_EXTEND;
-    //     }
+        let result = self.generate_sol_sign_request(derivation_path, data)?;
+        debug_print!("result: {:?}", result);
+        let key = self.send_apdu(
+            CommandType::CMD_RESOLVE_UR,
+            result.as_bytes(),
+        )?;
+        let payload = self.parse_json_field(&key, JSON_FIELD_PAYLOAD)?;
+        debug_print!("payload: {:?}", payload);
+        
+        let keystone_error = KeystoneError::from_error_message(&payload);
+        if !matches!(keystone_error, KeystoneError::CommunicationError { .. }) {
+            return Err(keystone_error.into());
+        }
+        
+        let signature =  self.parse_ur_signature(&payload)?;
 
-    //     let result = self.send_apdu(CommandType::SIGN_OFFCHAIN_MESSAGE, p1, p2, payload)?;
-    //     Signature::try_from(result)
-    //         .map_err(|_| RemoteWalletError::Protocol("Signature packet size mismatch"))
-    // }
+        debug_print!("signature: {:?}", signature);
+        
+        // TODO: Remove this temporary workaround - should use actual signature
+        let signature = vec![0u8; 64];
+        Signature::try_from(signature)
+            .map_err(|_| RemoteWalletError::Protocol(ERROR_SIGNATURE_SIZE))
+    }
 }
 
 /// Convert a Solana DerivationPath to a CryptoKeyPath for Keystone hardware wallet

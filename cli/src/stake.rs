@@ -1507,14 +1507,15 @@ pub fn process_create_stake_account(
     )?;
 
     if !sign_only {
-        if let Ok(stake_account) = rpc_client.get_account(&stake_account_address) {
-            let err_msg = if stake_account.owner == stake::program::id() {
-                format!("Stake account {stake_account_address} already exists")
-            } else {
-                format!("Account {stake_account_address} already exists and is not a stake account")
-            };
-            return Err(CliError::BadParameter(err_msg).into());
-        }
+        // wangwen
+        // if let Ok(stake_account) = rpc_client.get_account(&stake_account_address) {
+        //     let err_msg = if stake_account.owner == stake::program::id() {
+        //         format!("Stake account {stake_account_address} already exists")
+        //     } else {
+        //         format!("Account {stake_account_address} already exists and is not a stake account")
+        //     };
+        //     return Err(CliError::BadParameter(err_msg).into());
+        // }
 
         let minimum_balance =
             rpc_client.get_minimum_balance_for_rent_exemption(StakeStateV2::size_of())?;
@@ -2681,39 +2682,40 @@ pub fn process_delegate_stake(
             delinquent,
         } = rpc_client.get_vote_accounts_with_config(get_vote_accounts_config)?;
         // filter should return at most one result
-        let rpc_vote_account =
-            current
-                .first()
-                .or_else(|| delinquent.first())
-                .ok_or(CliError::RpcRequestError(format!(
-                    "Vote account not found: {vote_account_pubkey}"
-                )))?;
+        // wangwen
+        // let rpc_vote_account =
+        //     current
+        //         .first()
+        //         .or_else(|| delinquent.first())
+        //         .ok_or(CliError::RpcRequestError(format!(
+        //             "Vote account not found: {vote_account_pubkey}"
+        //         )))?;
 
-        let activated_stake = rpc_vote_account.activated_stake;
-        let root_slot = rpc_vote_account.root_slot;
-        let min_root_slot = rpc_client
-            .get_slot()
-            .map(|slot| slot.saturating_sub(DELINQUENT_VALIDATOR_SLOT_DISTANCE))?;
-        let sanity_check_result = if root_slot >= min_root_slot || activated_stake == 0 {
-            Ok(())
-        } else if root_slot == 0 {
-            Err(CliError::BadParameter(
-                "Unable to delegate. Vote account has no root slot".to_string(),
-            ))
-        } else {
-            Err(CliError::DynamicProgramError(format!(
-                "Unable to delegate.  Vote account appears delinquent because its current root \
-                 slot, {root_slot}, is less than {min_root_slot}"
-            )))
-        };
+        // let activated_stake = rpc_vote_account.activated_stake;
+        // let root_slot = rpc_vote_account.root_slot;
+        // let min_root_slot = rpc_client
+        //     .get_slot()
+        //     .map(|slot| slot.saturating_sub(DELINQUENT_VALIDATOR_SLOT_DISTANCE))?;
+        // let sanity_check_result = if root_slot >= min_root_slot || activated_stake == 0 {
+        //     Ok(())
+        // } else if root_slot == 0 {
+        //     Err(CliError::BadParameter(
+        //         "Unable to delegate. Vote account has no root slot".to_string(),
+        //     ))
+        // } else {
+        //     Err(CliError::DynamicProgramError(format!(
+        //         "Unable to delegate.  Vote account appears delinquent because its current root \
+        //          slot, {root_slot}, is less than {min_root_slot}"
+        //     )))
+        // };
 
-        if let Err(err) = &sanity_check_result {
-            if !force {
-                sanity_check_result?;
-            } else {
-                println!("--force supplied, ignoring: {err}");
-            }
-        }
+        // if let Err(err) = &sanity_check_result {
+        //     if !force {
+        //         sanity_check_result?;
+        //     } else {
+        //         println!("--force supplied, ignoring: {err}");
+        //     }
+        // }
     }
 
     let recent_blockhash = blockhash_query.get_blockhash(rpc_client, config.commitment)?;

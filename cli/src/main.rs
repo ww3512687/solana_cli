@@ -181,6 +181,7 @@ pub fn parse_args<'a>(
         command,
         mut signers,
     } = parse_command(matches, &default_signer, wallet_manager)?;
+    println!("{}:{:?}", file!(), line!());
 
     if signers.is_empty() {
         if let Ok(signer_info) =

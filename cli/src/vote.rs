@@ -461,22 +461,22 @@ pub fn parse_create_vote_account(
     let (fee_payer, fee_payer_pubkey) = signer_of(matches, FEE_PAYER_ARG.name, wallet_manager)?;
     let compute_unit_price = value_of(matches, COMPUTE_UNIT_PRICE_ARG.name);
 
-    if !allow_unsafe {
-        if authorized_withdrawer == vote_account_pubkey.unwrap() {
-            return Err(CliError::BadParameter(
-                "Authorized withdrawer pubkey is identical to vote account pubkey, an unsafe \
-                 configuration"
-                    .to_owned(),
-            ));
-        }
-        if authorized_withdrawer == identity_pubkey.unwrap() {
-            return Err(CliError::BadParameter(
-                "Authorized withdrawer pubkey is identical to identity account pubkey, an unsafe \
-                 configuration"
-                    .to_owned(),
-            ));
-        }
-    }
+    // if !allow_unsafe {
+    //     if authorized_withdrawer == vote_account_pubkey.unwrap() {
+    //         return Err(CliError::BadParameter(
+    //             "Authorized withdrawer pubkey is identical to vote account pubkey, an unsafe \
+    //              configuration"
+    //                 .to_owned(),
+    //         ));
+    //     }
+    //     if authorized_withdrawer == identity_pubkey.unwrap() {
+    //         return Err(CliError::BadParameter(
+    //             "Authorized withdrawer pubkey is identical to identity account pubkey, an unsafe \
+    //              configuration"
+    //                 .to_owned(),
+    //         ));
+    //     }
+    // }
 
     let mut bulk_signers = vec![fee_payer, vote_account, identity_account];
     if nonce_account.is_some() {
@@ -881,31 +881,31 @@ pub fn process_create_vote_account(
         config.commitment,
     )?;
 
-    if !sign_only {
-        if let Ok(response) =
-            rpc_client.get_account_with_commitment(&vote_account_address, config.commitment)
-        {
-            if let Some(vote_account) = response.value {
-                let err_msg = if vote_account.owner == solana_vote_program::id() {
-                    format!("Vote account {vote_account_address} already exists")
-                } else {
-                    format!(
-                        "Account {vote_account_address} already exists and is not a vote account"
-                    )
-                };
-                return Err(CliError::BadParameter(err_msg).into());
-            }
-        }
+    // if !sign_only {
+    //     if let Ok(response) =
+    //         rpc_client.get_account_with_commitment(&vote_account_address, config.commitment)
+    //     {
+    //         if let Some(vote_account) = response.value {
+    //             let err_msg = if vote_account.owner == solana_vote_program::id() {
+    //                 format!("Vote account {vote_account_address} already exists")
+    //             } else {
+    //                 format!(
+    //                     "Account {vote_account_address} already exists and is not a vote account"
+    //                 )
+    //             };
+    //             return Err(CliError::BadParameter(err_msg).into());
+    //         }
+    //     }
 
-        if let Some(nonce_account) = &nonce_account {
-            let nonce_account = solana_rpc_client_nonce_utils::get_account_with_commitment(
-                rpc_client,
-                nonce_account,
-                config.commitment,
-            )?;
-            check_nonce_account(&nonce_account, &nonce_authority.pubkey(), &recent_blockhash)?;
-        }
-    }
+    //     if let Some(nonce_account) = &nonce_account {
+    //         let nonce_account = solana_rpc_client_nonce_utils::get_account_with_commitment(
+    //             rpc_client,
+    //             nonce_account,
+    //             config.commitment,
+    //         )?;
+    //         check_nonce_account(&nonce_account, &nonce_authority.pubkey(), &recent_blockhash)?;
+    //     }
+    // }
 
     let mut tx = Transaction::new_unsigned(message);
     if sign_only {

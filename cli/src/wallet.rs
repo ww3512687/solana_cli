@@ -567,9 +567,6 @@ pub fn parse_transfer(
     let (fee_payer, fee_payer_pubkey) = signer_of(matches, FEE_PAYER_ARG.name, wallet_manager)?;
     let (from, from_pubkey) = signer_of(matches, "from", wallet_manager)?;
     let allow_unfunded_recipient = matches.is_present("allow_unfunded_recipient");
-    println!("{}:{:?}", file!(), line!());
-    println!("amount: {:?}", amount);
-    println!("from: {:?}", from);
 
     let mut bulk_signers = vec![fee_payer, from];
     if nonce_account.is_some() {

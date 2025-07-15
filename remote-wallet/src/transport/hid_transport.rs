@@ -75,7 +75,6 @@ impl Transport for HidTransport {
     }
 
     fn connect(&mut self) -> Result<(), RemoteWalletError> {
-        // HID 设备在创建时就已经连接
         self.connected = true;
         Ok(())
     }

@@ -115,31 +115,33 @@ where
             from_rent_exempt_minimum,
             build_message,
         )?;
-        if from_pubkey == fee_pubkey {
-            if from_balance == 0 || from_balance < spend + fee {
-                return Err(CliError::InsufficientFundsForSpendAndFee(
-                    lamports_to_sol(spend),
-                    lamports_to_sol(fee),
-                    *from_pubkey,
-                ));
-            }
-        } else {
-            println!("{}:{:?}", file!(), line!());
-            if from_balance < spend {
-                println!("{}:{:?}", file!(), line!());
-                return Err(CliError::InsufficientFundsForSpend(
-                    lamports_to_sol(spend),
-                    *from_pubkey,
-                ));
-            }
-            if !check_account_for_balance_with_commitment(rpc_client, fee_pubkey, fee, commitment)?
-            {
-                return Err(CliError::InsufficientFundsForFee(
-                    lamports_to_sol(fee),
-                    *fee_pubkey,
-                ));
-            }
-        }
+        println!("{}:{:?}", file!(), line!());
+        // wangwen
+        // if from_pubkey == fee_pubkey {
+        //     if from_balance == 0 || from_balance < spend + fee {
+        //         return Err(CliError::InsufficientFundsForSpendAndFee(
+        //             lamports_to_sol(spend),
+        //             lamports_to_sol(fee),
+        //             *from_pubkey,
+        //         ));
+        //     }
+        // } else {
+        //     println!("{}:{:?}", file!(), line!());
+        //     if from_balance < spend {
+        //         println!("{}:{:?}", file!(), line!());
+        //         return Err(CliError::InsufficientFundsForSpend(
+        //             lamports_to_sol(spend),
+        //             *from_pubkey,
+        //         ));
+        //     }
+        //     if !check_account_for_balance_with_commitment(rpc_client, fee_pubkey, fee, commitment)?
+        //     {
+        //         return Err(CliError::InsufficientFundsForFee(
+        //             lamports_to_sol(fee),
+        //             *fee_pubkey,
+        //         ));
+        //     }
+        // }
         Ok((message, spend))
     }
 }

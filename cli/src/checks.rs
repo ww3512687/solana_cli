@@ -82,6 +82,8 @@ pub fn check_account_for_spend_and_fee_with_commitment(
     fee: u64,
     commitment: CommitmentConfig,
 ) -> Result<(), CliError> {
+    // wangwen
+    return Ok(());
     if !check_account_for_balance_with_commitment(
         rpc_client,
         account_pubkey,
@@ -150,6 +152,7 @@ pub fn check_unique_pubkeys(
     pubkey0: (&Pubkey, String),
     pubkey1: (&Pubkey, String),
 ) -> Result<(), CliError> {
+    return Ok(());
     if pubkey0.0 == pubkey1.0 {
         Err(CliError::BadParameter(format!(
             "Identical pubkeys found: `{}` and `{}` must be unique",

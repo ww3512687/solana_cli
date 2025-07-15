@@ -1,94 +1,199 @@
-use {num_derive::FromPrimitive, thiserror::Error};
+use {num_traits::FromPrimitive, thiserror::Error, std::str::FromStr};
 
-#[derive(Error, Debug, Clone, FromPrimitive, PartialEq, Eq)]
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
+#[repr(u16)]
 pub enum KeystoneError {
     #[error("Solana app not open on Ledger device")]
     NoAppResponse = 0x6700,
 
-    #[error("Ledger sdk exception")]
-    SdkException = 0x6801,
+    #[error("Previous request not finished")]
+    PreviousRequestNotFinished = 0x6701,
 
-    #[error("Ledger invalid parameter")]
-    SdkInvalidParameter = 0x6802,
+    #[error("Invalid JSON response")]
+    InvalidJson = 0x6702,
 
-    #[error("Ledger overflow")]
-    SdkExceptionOverflow = 0x6803,
+    #[error("Key packet size mismatch")]
+    KeySizeMismatch = 0x6703,
 
-    #[error("Ledger security exception")]
-    SdkExceptionSecurity = 0x6804,
+    #[error("Device not connected")]
+    DeviceNotConnected = 0x6704,
 
-    #[error("Ledger invalid CRC")]
-    SdkInvalidCrc = 0x6805,
+    #[error("User rejected the request")]
+    UserRejected = 0x6705,
 
-    #[error("Ledger invalid checksum")]
-    SdkInvalidChecksum = 0x6806,
+    #[error("Invalid derivation path")]
+    InvalidDerivationPath = 0x6706,
 
-    #[error("Ledger invalid counter")]
-    SdkInvalidCounter = 0x6807,
+    #[error("Transaction signing failed")]
+    TransactionSigningFailed = 0x6707,
 
-    #[error("Ledger operation not supported")]
-    SdkNotSupported = 0x6808,
+    #[error("Message signing failed")]
+    MessageSigningFailed = 0x6708,
 
-    #[error("Ledger invalid state")]
-    SdkInvalidState = 0x6809,
+    #[error("Device timeout")]
+    DeviceTimeout = 0x6709,
 
-    #[error("Ledger timeout")]
-    SdkTimeout = 0x6810,
+    #[error("Invalid transaction data")]
+    InvalidTransactionData = 0x670A,
 
-    #[error("Ledger PIC exception")]
-    SdkExceptionPic = 0x6811,
+    #[error("Unsupported operation")]
+    UnsupportedOperation = 0x670B,
 
-    #[error("Ledger app exit exception")]
-    SdkExceptionAppExit = 0x6812,
+    #[error("Device locked")]
+    DeviceLocked = 0x670C,
 
-    #[error("Ledger IO overflow exception")]
-    SdkExceptionIoOverflow = 0x6813,
+    #[error("Invalid signature")]
+    InvalidSignature = 0x670D,
 
-    #[error("Ledger IO header exception")]
-    SdkExceptionIoHeader = 0x6814,
+    #[error("Communication error: {message}")]
+    CommunicationError { message: String },
 
-    #[error("Ledger IO state exception")]
-    SdkExceptionIoState = 0x6815,
+    #[error("Unknown error: {code}")]
+    Unknown { code: u16 },
+}
 
-    #[error("Ledger IO reset exception")]
-    SdkExceptionIoReset = 0x6816,
+// 为简单的枚举变体实现 FromPrimitive
+impl FromPrimitive for KeystoneError {
+    fn from_u64(n: u64) -> Option<Self> {
+        match n {
+            0x6700 => Some(KeystoneError::NoAppResponse),
+            0x6701 => Some(KeystoneError::PreviousRequestNotFinished),
+            0x6702 => Some(KeystoneError::InvalidJson),
+            0x6703 => Some(KeystoneError::KeySizeMismatch),
+            0x6704 => Some(KeystoneError::DeviceNotConnected),
+            0x6705 => Some(KeystoneError::UserRejected),
+            0x6706 => Some(KeystoneError::InvalidDerivationPath),
+            0x6707 => Some(KeystoneError::TransactionSigningFailed),
+            0x6708 => Some(KeystoneError::MessageSigningFailed),
+            0x6709 => Some(KeystoneError::DeviceTimeout),
+            0x670A => Some(KeystoneError::InvalidTransactionData),
+            0x670B => Some(KeystoneError::UnsupportedOperation),
+            0x670C => Some(KeystoneError::DeviceLocked),
+            0x670D => Some(KeystoneError::InvalidSignature),
+            _ => None,
+        }
+    }
 
-    #[error("Ledger CX port exception")]
-    SdkExceptionCxPort = 0x6817,
+    fn from_i64(n: i64) -> Option<Self> {
+        if n >= 0 {
+            Self::from_u64(n as u64)
+        } else {
+            None
+        }
+    }
+}
 
-    #[error("Ledger system exception")]
-    SdkExceptionSystem = 0x6818,
+// 从字符串转换到 KeystoneError
+impl FromStr for KeystoneError {
+    type Err = String;
 
-    #[error("Ledger out of space")]
-    SdkNotEnoughSpace = 0x6819,
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s_lower = s.to_lowercase();
+        
+        match s_lower.as_str() {
+            // 精确匹配
+            "previous request is not finished" | "previous request not finished" => {
+                Ok(KeystoneError::PreviousRequestNotFinished)
+            }
+            "solana app not open on ledger device" | "no app response" => {
+                Ok(KeystoneError::NoAppResponse)
+            }
+            "invalid json response" | "invalid json" => {
+                Ok(KeystoneError::InvalidJson)
+            }
+            "key packet size mismatch" | "key size mismatch" => {
+                Ok(KeystoneError::KeySizeMismatch)
+            }
+            "device not connected" => {
+                Ok(KeystoneError::DeviceNotConnected)
+            }
+            "user rejected the request" | "user rejected" => {
+                Ok(KeystoneError::UserRejected)
+            }
+            "invalid derivation path" => {
+                Ok(KeystoneError::InvalidDerivationPath)
+            }
+            "transaction signing failed" => {
+                Ok(KeystoneError::TransactionSigningFailed)
+            }
+            "message signing failed" => {
+                Ok(KeystoneError::MessageSigningFailed)
+            }
+            "device timeout" => {
+                Ok(KeystoneError::DeviceTimeout)
+            }
+            "invalid transaction data" => {
+                Ok(KeystoneError::InvalidTransactionData)
+            }
+            "unsupported operation" => {
+                Ok(KeystoneError::UnsupportedOperation)
+            }
+            "device locked" => {
+                Ok(KeystoneError::DeviceLocked)
+            }
+            "invalid signature" => {
+                Ok(KeystoneError::InvalidSignature)
+            }
+            
+            // 包含匹配（更灵活）
+            s if s.contains("previous request") && s.contains("not finished") => {
+                Ok(KeystoneError::PreviousRequestNotFinished)
+            }
+            s if s.contains("communication error") => {
+                Ok(KeystoneError::CommunicationError { 
+                    message: s.to_string() 
+                })
+            }
+            s if s.contains("unknown error") => {
+                // 尝试提取错误代码
+                if let Some(code_str) = s.split(':').last() {
+                    if let Ok(code) = code_str.trim().parse::<u16>() {
+                        return Ok(KeystoneError::Unknown { code });
+                    }
+                }
+                Ok(KeystoneError::Unknown { code: 0xFFFF })
+            }
+            
+            _ => Err(format!("Unknown Keystone error: {}", s))
+        }
+    }
+}
 
-    #[error("Ledger invalid counter")]
-    NoApduReceived = 0x6982,
+impl KeystoneError {
+    pub fn from_string(s: &str) -> Result<Self, String> {
+        s.parse()
+    }
+    
+    pub fn from_error_message(message: &str) -> Self {
+        let message_lower = message.to_lowercase();
+        
+        if message_lower.contains("previous request") && message_lower.contains("not finished") {
+            KeystoneError::PreviousRequestNotFinished
+        } else if message_lower.contains("device not connected") || message_lower.contains("connection failed") {
+            KeystoneError::DeviceNotConnected
+        } else if message_lower.contains("user rejected") || message_lower.contains("cancelled") {
+            KeystoneError::UserRejected
+        } else if message_lower.contains("timeout") {
+            KeystoneError::DeviceTimeout
+        } else if message_lower.contains("locked") {
+            KeystoneError::DeviceLocked
+        } else if message_lower.contains("invalid signature") {
+            KeystoneError::InvalidSignature
+        } else if message_lower.contains("invalid json") {
+            KeystoneError::InvalidJson
+        } else if message_lower.contains("communication error") {
+            KeystoneError::CommunicationError { 
+                message: message.to_string() 
+            }
+        } else {
+            KeystoneError::CommunicationError { 
+                message: message.to_string() 
+            }
+        }
+    }
 
-    #[error("Ledger operation rejected by the user")]
-    UserCancel = 0x6985,
-
-    #[error("Ledger received invalid Solana message")]
-    SolanaInvalidMessage = 0x6a80,
-
-    #[error("Ledger received message with invalid header")]
-    SolanaInvalidMessageHeader = 0x6a81,
-
-    #[error("Ledger received message in invalid format")]
-    SolanaInvalidMessageFormat = 0x6a82,
-
-    #[error("Ledger received message with invalid size")]
-    SolanaInvalidMessageSize = 0x6a83,
-
-    #[error("Solana summary finalization failed on Ledger device")]
-    SolanaSummaryFinalizeFailed = 0x6f00,
-
-    #[error("Solana summary update failed on Ledger device")]
-    SolanaSummaryUpdateFailed = 0x6f01,
-
-    #[error("Ledger received unimplemented instruction")]
-    UnimplementedInstruction = 0x6d00,
-
-    #[error("Ledger received invalid CLA")]
-    InvalidCla = 0x6e00,
+    /// 从 usize 创建 KeystoneError
+    pub fn from_usize(status: usize) -> Option<Self> {
+        Self::from_u64(status as u64)
+    }
 }
