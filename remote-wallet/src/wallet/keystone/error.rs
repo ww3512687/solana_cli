@@ -45,6 +45,9 @@ pub enum KeystoneError {
     #[error("Invalid signature")]
     InvalidSignature = 0x670D,
 
+    #[error("UR parsing rejected")]
+    URParsingRejected = 0x670E,
+
     #[error("Communication error: {message}")]
     CommunicationError { message: String },
 
@@ -134,6 +137,9 @@ impl FromStr for KeystoneError {
             "invalid signature" => {
                 Ok(KeystoneError::InvalidSignature)
             }
+            "UR parsing rejected" => {
+                Ok(KeystoneError::URParsingRejected)
+            }
             
             // 包含匹配（更灵活）
             s if s.contains("previous request") && s.contains("not finished") => {
@@ -185,6 +191,8 @@ impl KeystoneError {
             KeystoneError::CommunicationError { 
                 message: message.to_string() 
             }
+        } else if message_lower.contains("UR parsing rejected") {
+            KeystoneError::URParsingRejected 
         } else {
             KeystoneError::CommunicationError { 
                 message: message.to_string() 
