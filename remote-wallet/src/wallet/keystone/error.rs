@@ -191,7 +191,7 @@ impl KeystoneError {
             KeystoneError::CommunicationError { 
                 message: message.to_string() 
             }
-        } else if message_lower.contains("UR parsing rejected") {
+        } else if message_lower.contains("ur parsing rejected") {
             KeystoneError::URParsingRejected 
         } else {
             KeystoneError::CommunicationError { 

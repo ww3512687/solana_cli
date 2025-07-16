@@ -1718,6 +1718,8 @@ pub fn process_deactivate_stake_account(
 
     let ixs = vec![if deactivate_delinquent {
         let stake_account = rpc_client.get_account(&stake_account_address)?;
+        // wangwen
+        println!("file:{}:{}", file!(), line!());
         if stake_account.owner != stake::program::id() {
             return Err(CliError::BadParameter(format!(
                 "{stake_account_address} is not a stake account",
@@ -2419,6 +2421,7 @@ fn get_stake_account_state(
         .ok_or_else(|| {
             CliError::RpcRequestError(format!("{stake_account_pubkey:?} account does not exist"))
         })?;
+        println!("file:{}:{}", file!(), line!());
     if stake_account.owner != stake::program::id() {
         return Err(CliError::RpcRequestError(format!(
             "{stake_account_pubkey:?} is not a stake account",
