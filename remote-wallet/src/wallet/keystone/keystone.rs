@@ -26,6 +26,8 @@ use {
     },
     ur_registry::registry_types::URType,
     ur_registry::traits::RegistryItem,
+    crate::transport::transport_trait::Transport,
+    crate::transport::hid_transport::HidTransport,
 };
 #[cfg(feature = "hidapi")]
 use {
@@ -130,8 +132,7 @@ pub struct LedgerSettings {
 
 /// Ledger Wallet device
 pub struct KeystoneWallet {
-    #[cfg(feature = "hidapi")]
-    pub device: hidapi::HidDevice,
+    pub transport: Box<dyn Transport>,
     pub pretty_path: String,
     pub version: FirmwareVersion,
     pub mfp: Option<[u8; 4]>,
@@ -139,7 +140,7 @@ pub struct KeystoneWallet {
 
 impl fmt::Debug for KeystoneWallet {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "HidDevice")
+        write!(f, "KeystoneWallet")
     }
 }
 #[derive(Debug, Clone)]
@@ -155,9 +156,9 @@ pub struct EAPDUFrame {
 
 #[cfg(feature = "hidapi")]
 impl KeystoneWallet {
-    pub fn new(device: hidapi::HidDevice) -> Self {
+    pub fn new(transport: Box<dyn Transport>) -> Self {
         Self {
-            device,
+            transport,
             pretty_path: String::default(),
             version: FirmwareVersion::new(0, 0, 0),
             mfp: None,
@@ -221,7 +222,7 @@ impl KeystoneWallet {
             if command == CommandType::CMD_RESOLVE_UR {
                 // debug_print!("send command: sequence_number: {:?}, request_id: {:?}", sequence_number, request_id);
             }
-            let n = self.device.write(&hid_chunk[..])?;
+            let n = self.transport.write(&hid_chunk[..]).map_err(RemoteWalletError::Hid)?;
             if n < size + header {
                 return Err(RemoteWalletError::Protocol("Write data size mismatch"));
             }
@@ -256,12 +257,12 @@ impl KeystoneWallet {
 
         loop {
             // Read HID packet
-            let n = self.device.read(&mut buffer)?;
-            if n < LEDGER_TRANSPORT_HEADER_LEN {
+            let chunk = self.transport.read().map_err(RemoteWalletError::Hid)?;
+            if chunk.len() < LEDGER_TRANSPORT_HEADER_LEN {
                 return Err(RemoteWalletError::Protocol("Invalid HID packet size"));
             }
 
-            let packet = &buffer[HID_PREFIX_ZERO..n];
+            let packet = &chunk[HID_PREFIX_ZERO..chunk.len()];
             let packet = {
                 let mut end = packet.len();
                 while end > 0 && packet[end - 1] == 0x00 {
@@ -496,10 +497,8 @@ impl WalletProbe for KeystoneProbe {
         let handle = usb
             .open_path(devinfo.path())
             .map_err(|e| RemoteWalletError::Hid(e.to_string()))?;
-        let mut wallet = KeystoneWallet::new(handle);
-        let info = wallet
-            .read_device(&devinfo)
-            .map_err(|e| RemoteWalletError::Hid(e.to_string()))?;
+        let mut wallet = KeystoneWallet::new(Box::new(HidTransport::new(handle)));
+        let info = wallet.read_device(&devinfo).map_err(|e| RemoteWalletError::Hid(e.to_string()))?;
         wallet.pretty_path = info.get_pretty_path();
         Ok(Device {
             path: devinfo.path().to_string_lossy().into_owned(),
