@@ -24,6 +24,8 @@ use {
 };
 #[cfg(feature = "hidapi")]
 use {hidapi::DeviceInfo, parking_lot::Mutex, std::sync::Arc};
+use crate::transport::hid_transport::HidTransport;
+use crate::transport::transport_trait::Transport;
 
 const HID_GLOBAL_USAGE_PAGE: u16 = 0xFF00;
 const HID_USB_DEVICE_CLASS: u8 = 0;
