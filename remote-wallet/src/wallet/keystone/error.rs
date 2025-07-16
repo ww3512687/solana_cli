@@ -205,3 +205,32 @@ impl KeystoneError {
         Self::from_u64(status as u64)
     }
 }
+
+use crate::wallet::errors::HardwareWalletError;
+
+impl HardwareWalletError for KeystoneError {
+    fn code(&self) -> u16 {
+        match self {
+            KeystoneError::NoAppResponse => 0x6700,
+            KeystoneError::PreviousRequestNotFinished => 0x6701,
+            KeystoneError::InvalidJson => 0x6702,
+            KeystoneError::KeySizeMismatch => 0x6703,
+            KeystoneError::DeviceNotConnected => 0x6704,
+            KeystoneError::UserRejected => 0x6705,
+            KeystoneError::InvalidDerivationPath => 0x6706,
+            KeystoneError::TransactionSigningFailed => 0x6707,
+            KeystoneError::MessageSigningFailed => 0x6708,
+            KeystoneError::DeviceTimeout => 0x6709,
+            KeystoneError::InvalidTransactionData => 0x670A,
+            KeystoneError::UnsupportedOperation => 0x670B,
+            KeystoneError::DeviceLocked => 0x670C,
+            KeystoneError::InvalidSignature => 0x670D,
+            KeystoneError::URParsingRejected => 0x670E,
+            KeystoneError::CommunicationError { .. } => 0x67FF,
+            KeystoneError::Unknown { code } => *code,
+        }
+    }
+    fn description(&self) -> String {
+        self.to_string()
+    }
+}
