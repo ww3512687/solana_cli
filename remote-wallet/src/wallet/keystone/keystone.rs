@@ -222,7 +222,7 @@ impl KeystoneWallet {
             if command == CommandType::CMD_RESOLVE_UR {
                 // debug_print!("send command: sequence_number: {:?}, request_id: {:?}", sequence_number, request_id);
             }
-            let n = self.transport.write(&hid_chunk[..]).map_err(RemoteWalletError::Hid)?;
+            let n = self.transport.write(&hid_chunk[..])?;
             if n < size + header {
                 return Err(RemoteWalletError::Protocol("Write data size mismatch"));
             }
@@ -257,7 +257,7 @@ impl KeystoneWallet {
 
         loop {
             // Read HID packet
-            let chunk = self.transport.read().map_err(RemoteWalletError::Hid)?;
+            let chunk = self.transport.read()?;
             if chunk.len() < LEDGER_TRANSPORT_HEADER_LEN {
                 return Err(RemoteWalletError::Protocol("Invalid HID packet size"));
             }

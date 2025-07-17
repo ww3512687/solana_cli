@@ -15,7 +15,5 @@ macro_rules! debug_print {
     };
 }
 
-pub trait Transport: Send {
-    fn write(&self, data: &[u8]) -> Result<usize, String>;
-    fn read(&self) -> Result<Vec<u8>, String>;
-}
+// Re-export Transport trait for convenience
+pub use transport::transport_trait::Transport;

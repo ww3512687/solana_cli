@@ -197,7 +197,7 @@ impl LedgerWallet {
                 chunk[header..header + size].copy_from_slice(&data[offset..offset + size]);
             }
             trace!("Ledger write {:?}", &hid_chunk[..]);
-            let n = self.transport.write(&hid_chunk[..]).map_err(|e| RemoteWalletError::Hid(e))?;
+            let n = self.transport.write(&hid_chunk[..])?;
             if n < size + header {
                 return Err(RemoteWalletError::Protocol("Incomplete write"));
             }
@@ -228,7 +228,7 @@ impl LedgerWallet {
 
         // terminate the loop if `sequence_number` reaches its max_value and report error
         for chunk_index in 0..=0xffff {
-            let chunk = self.transport.read().map_err(RemoteWalletError::Hid)?;
+            let chunk = self.transport.read()?;
             trace!("Ledger read {:?}", &chunk[..]);
             if chunk.len() < LEDGER_TRANSPORT_HEADER_LEN
                 || chunk[0] != 0x01
