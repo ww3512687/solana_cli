@@ -8986,6 +8986,7 @@ dependencies = [
 [[package]]
 name = "ur-parse-lib"
 version = "0.2.0"
+source = "git+https://github.com/KeystoneHQ/keystone-sdk-rust.git?branch=feat/sol_cli#3f569a2e7d8237a8256abd3dfc4bf5af0b5e93fe"
 dependencies = [
  "hex",
  "ur",
@@ -8995,6 +8996,7 @@ dependencies = [
 [[package]]
 name = "ur-registry"
 version = "0.1.1"
+source = "git+https://github.com/KeystoneHQ/keystone-sdk-rust.git?branch=feat/sol_cli#3f569a2e7d8237a8256abd3dfc4bf5af0b5e93fe"
 dependencies = [
  "bs58 0.5.1",
  "core2",

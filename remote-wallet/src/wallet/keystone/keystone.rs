@@ -24,7 +24,6 @@ use {
     ur_registry::extend::qr_hardware_call::{
         CallParams, CallType, HardWareCallVersion, QRHardwareCall,
     },
-    ur_registry::registry_types::URType,
     ur_registry::traits::RegistryItem,
     crate::transport::transport_trait::Transport,
     crate::transport::hid_transport::HidTransport,
@@ -185,6 +184,8 @@ impl KeystoneWallet {
         let mut offset = 0;
         let mut sequence_number = 0;
         let mut hid_chunk = [0_u8; HID_PACKET_SIZE];
+        println!("data_len: {:?}", data_len);
+        println!("data: {:2x?}", data);
         let total_packets = if data_len > 11 {
             if data_len % (64 - 10) == 0 {
                 data_len / (64 - 10)
@@ -204,9 +205,8 @@ impl KeystoneWallet {
             let size = min(64 - header, data_len - offset);
             {
                 let chunk = &mut hid_chunk[HID_PREFIX_ZERO..];
-                chunk[0..2].copy_from_slice(&[0x00, 0x00]);
-                chunk[2..10].copy_from_slice(&[
-                    (command as u16 >> 8) as u8,
+                chunk[0..3].copy_from_slice(&[0x00, 0x00, 0x00]);
+                chunk[3..10].copy_from_slice(&[
                     (command as u16 & 0xff) as u8,
                     (total_packets >> 8) as u8,
                     (total_packets & 0xff) as u8,
@@ -221,6 +221,7 @@ impl KeystoneWallet {
             trace!("Ledger write {:?}", &hid_chunk[..]);
             if command == CommandType::CMD_RESOLVE_UR {
                 // debug_print!("send command: sequence_number: {:?}, request_id: {:?}", sequence_number, request_id);
+                // debug_print!("send command: {:2x?}", &hid_chunk[..]);
             }
             let n = self.transport.write(&hid_chunk[..])?;
             if n < size + header {
@@ -249,11 +250,11 @@ impl KeystoneWallet {
     //		* APDU_Payload				(Variable)
     //
     fn read(&self) -> Result<Vec<u8>, RemoteWalletError> {
-        let mut buffer = [0u8; HID_PACKET_SIZE];
+        let _buffer = [0u8; HID_PACKET_SIZE];
         let mut result_data = Vec::new();
         let mut sequence_number = 0u16;
         let mut total_length = 0usize;
-        let mut received_length = 0usize;
+        let _received_length = 0usize;
 
         loop {
             // Read HID packet
@@ -271,11 +272,11 @@ impl KeystoneWallet {
                 &packet[..end]
             };
             // Parse transport header
-            let cla = packet[0];
+            let _cla = packet[0];
             let command = u16::from_be_bytes([packet[1], packet[2]]);
             let total_packets = u16::from_be_bytes([packet[3], packet[4]]);
             let packet_seq = u16::from_be_bytes([packet[5], packet[6]]);
-            let request_id = u16::from_be_bytes([packet[7], packet[8]]);
+            let _request_id = u16::from_be_bytes([packet[7], packet[8]]);
             let packet_data = &packet[9..];
             if command == CommandType::CMD_RESOLVE_UR as u16 {
                 debug_print!("packet_length: {:?}", packet_data.len());
@@ -287,7 +288,7 @@ impl KeystoneWallet {
             }
 
             // Optionally, convert to CommandType enum for type safety
-            let command_type = CommandType::from_u16(command)
+            let _command_type = CommandType::from_u16(command)
                 .ok_or(RemoteWalletError::Protocol("Invalid command type"))?;
 
             if packet_seq != sequence_number {

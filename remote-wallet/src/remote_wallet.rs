@@ -2,7 +2,7 @@ use {
     crate::debug_print,
     crate::errors::RemoteWalletError,
     crate::{
-        locator::{Locator, LocatorError, Manufacturer},
+        locator::{Locator, Manufacturer},
         wallet::{
             keystone::keystone::KeystoneWallet,
             ledger::ledger::LedgerWallet,
@@ -13,9 +13,9 @@ use {
     log::*,
     parking_lot::RwLock,
     solana_sdk::{
-        derivation_path::{DerivationPath, DerivationPathError},
+        derivation_path::{DerivationPath},
         pubkey::Pubkey,
-        signature::{Signature, SignerError},
+        signature::{Signature},
     },
     std::{
         rc::Rc,
@@ -24,7 +24,7 @@ use {
 };
 #[cfg(feature = "hidapi")]
 use {hidapi::DeviceInfo, parking_lot::Mutex, std::sync::Arc};
-use crate::transport::hid_transport::HidTransport;
+
 use crate::transport::transport_trait::Transport;
 
 const HID_GLOBAL_USAGE_PAGE: u16 = 0xFF00;
@@ -235,7 +235,7 @@ impl RemoteWalletManager {
         
         while start_time.elapsed() <= *max_polling_duration {
             match self.update_devices() {
-                Ok(new_device_count) => {
+                Ok(_new_device_count) => {
                     let current_total = self.devices.read().len();
                     if current_total > 0 {
                         let plural = if current_total == 1 { LOG_DEVICE_SINGULAR } else { LOG_DEVICE_PLURAL };
@@ -460,7 +460,7 @@ pub fn initialize_wallet_manager() -> Result<Rc<RemoteWalletManager>, RemoteWall
 /// Returns `Some(manager)` if devices are found, `None` if no devices are detected
 pub fn maybe_wallet_manager() -> Result<Option<Rc<RemoteWalletManager>>, RemoteWalletError> {
     let wallet_manager = initialize_wallet_manager()?;
-    let total_devices = wallet_manager.devices.read().len();
+    let _total_devices = wallet_manager.devices.read().len();
     
     // Perform initial device scan
     wallet_manager.update_devices()?;
